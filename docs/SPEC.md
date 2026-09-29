@@ -314,32 +314,42 @@ oxim/
 ├─ crates/
 │  ├─ protocols: oxim-hl7, oxim-mllp, oxim-astm, oxim-poct1a, oxim-fhir, oxim-cda,
 │  │             oxim-dicom, oxim-x12, oxim-ncpdp, oxim-formats (JSON/XML/CSV/fixed-width)
-│  ├─ oxim-model        message envelope, path API, normalized clinical model
-│  ├─ oxim-mapping      built-in converters (v2↔FHIR, ASTM/POCT1-A → …)
-│  ├─ oxim-store        storage interface + SQLite + PostgreSQL + blob store
-│  ├─ oxim-core         channel runtime, routing, queues, order cache
-│  ├─ oxim-connectors   all connectors (behind feature flags)
+│  ├─ oxim-model        message envelope, identifiers, normalized clinical model
+│  ├─ oxim-mapping      built-in converters (HL7 v2, ASTM, POCT1-A ↔ normalized model)
+│  ├─ oxim-store        storage interface + SQLite
+│  ├─ oxim-store-postgres  PostgreSQL store for clusters
+│  ├─ oxim-core         channel runtime, routing, queues, replies
+│  ├─ oxim-lab          order cache, host queries, test routing and balancing
+│  ├─ oxim-connectors   stream, file, HTTP, ASTM, POCT1-A, serial, in-process connectors, TLS
+│  ├─ oxim-connectors-db, oxim-connectors-messaging, oxim-connectors-remote
+│  │                    databases; MQTT/AMQP/Kafka/NATS; SFTP/FTP/S3/SMTP/IMAP/SOAP
 │  ├─ oxim-transform    mapping language, code tables, templates
 │  ├─ oxim-script       QuickJS sandbox + Mirth Connect compatibility
-│  ├─ oxim-plugin       WebAssembly host + plugin SDK
-│  ├─ oxim-devices      device registry + profiles
+│  ├─ oxim-plugin       WebAssembly host (the SDK lives in plugin-sdk/)
+│  ├─ oxim-devices      device registry + profiles + conformance runs
 │  ├─ oxim-cluster      leases, failover
-│  ├─ oxim-auth         users, RBAC, LDAP, OIDC, SAML, MFA
+│  ├─ oxim-auth         users, RBAC, sessions, tokens, directory and SSO logins
 │  ├─ oxim-alert        alert engine
-│  ├─ oxim-server       REST API, WebSocket, embedded UI
+│  ├─ oxim-server       REST API, server-sent events, embedded UI
 │  ├─ oxim-mirth        Mirth Connect importer
 │  ├─ oxim-ffi          C ABI
+│  ├─ oxim-sim, oxim-capture, oxim-anonymize, oxim-bench   tools
 │  └─ oxim              main binary + CLI
-├─ tools/        oxim-sim, oxim-capture, oxim-anonymize
 ├─ bindings/python/
 ├─ ui/           Svelte + TypeScript
 ├─ plugin-sdk/
-├─ deploy/       Docker, Helm, systemd, Windows installer
-├─ docs/         user documentation + ADRs
-└─ fixtures/  fuzz/  benches/  tests/e2e/
+├─ profiles/     example device profiles
+├─ deploy/       Docker, Helm, systemd, Windows installer, packages, offline bundle
+├─ docs/         installation guides, the book, ADRs, security
+└─ fuzz/
 
 Separate repositories: oxim-health/device-profiles, oxim-health/channel-templates
 ```
+
+Connector families that pull large dependency trees live in their own
+crates (`oxim-connectors-db`, `-messaging`, `-remote`) instead of feature
+flags of one crate, so each can be left out of a custom build; the `oxim`
+binary includes all of them. Tools live in `crates/` like the libraries.
 
 ### 14.2 Runtime model
 
