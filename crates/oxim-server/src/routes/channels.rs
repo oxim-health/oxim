@@ -16,7 +16,37 @@ use crate::caller::Caller;
 use crate::error::{ApiError, ApiResult};
 use crate::extract::{PathParam, TextBody};
 use crate::files::{atomic_write, channel_files, find_channel};
+use crate::history::Change;
 use crate::state::AppState;
+
+/// Records a channel version when history is kept; failures are logged,
+/// since the change itself succeeded.
+async fn remember(
+    state: &AppState,
+    id: &ChannelId,
+    change: Change,
+    yaml: Option<String>,
+    actor: String,
+) -> Option<u64> {
+    let history = state.inner.services.history.clone()?;
+    let at = state.inner.engine.clock().now();
+    let channel = id.to_string();
+    match tokio::task::spawn_blocking(move || {
+        history.record(&channel, change, yaml.as_deref(), &actor, at)
+    })
+    .await
+    {
+        Ok(Ok(version)) => version,
+        Ok(Err(e)) => {
+            tracing::warn!(channel = %id, error = %e, "cannot record the channel version");
+            None
+        }
+        Err(e) => {
+            tracing::warn!(channel = %id, error = %e, "cannot record the channel version");
+            None
+        }
+    }
+}
 
 fn channel_id(id: &str) -> ApiResult<ChannelId> {
     ChannelId::new(id).map_err(|e| ApiError::bad_request(e.to_string()))
@@ -154,6 +184,7 @@ pub(crate) async fn put(
         .map(|file| file.path)
         .unwrap_or_else(|| dir.join(format!("{id}.yaml")));
     atomic_write(&path, body.as_bytes()).map_err(ApiError::internal)?;
+    let version = remember(&state, &id, Change::Saved, Some(body), caller.actor()).await;
     audit::record(
         &state,
         &caller.actor(),
@@ -163,7 +194,108 @@ pub(crate) async fn put(
         Some(file_name(&path)),
     )
     .await?;
-    Ok(Json(json!({ "id": id, "file": file_name(&path) })))
+    Ok(Json(
+        json!({ "id": id, "file": file_name(&path), "version": version }),
+    ))
+}
+
+fn history(state: &AppState) -> ApiResult<std::sync::Arc<crate::history::ChannelHistory>> {
+    state
+        .inner
+        .services
+        .history
+        .clone()
+        .ok_or_else(|| ApiError::not_found("channel history is not kept by this server"))
+}
+
+/// `GET /channels/{id}/history`: the versions of a channel, newest first.
+pub(crate) async fn versions(
+    State(state): State<AppState>,
+    caller: Caller,
+    PathParam(id): PathParam<String>,
+) -> ApiResult<Json<Value>> {
+    caller.require(Permission::ViewChannels)?;
+    let id = channel_id(&id)?;
+    let history = history(&state)?;
+    let channel = id.to_string();
+    let versions = tokio::task::spawn_blocking(move || history.list(&channel))
+        .await
+        .map_err(ApiError::internal)?
+        .map_err(ApiError::internal)?;
+    Ok(Json(json!({ "id": id, "versions": versions })))
+}
+
+/// `GET /channels/{id}/history/{version}`: one version with its YAML
+/// (editors only, like the current YAML).
+pub(crate) async fn version(
+    State(state): State<AppState>,
+    caller: Caller,
+    PathParam((id, number)): PathParam<(String, u64)>,
+) -> ApiResult<Json<Value>> {
+    caller.require(Permission::EditChannels)?;
+    let id = channel_id(&id)?;
+    let history = history(&state)?;
+    let channel = id.to_string();
+    let found = tokio::task::spawn_blocking(move || history.get(&channel, number))
+        .await
+        .map_err(ApiError::internal)?
+        .map_err(ApiError::internal)?
+        .ok_or_else(|| ApiError::not_found(format!("channel {id} has no version {number}")))?;
+    Ok(Json(
+        serde_json::to_value(found).map_err(ApiError::internal)?,
+    ))
+}
+
+/// `POST /channels/{id}/history/{version}/restore`: writes an earlier
+/// version back as the channel file (the watcher redeploys it). Audited.
+pub(crate) async fn restore_version(
+    State(state): State<AppState>,
+    caller: Caller,
+    PathParam((id, number)): PathParam<(String, u64)>,
+) -> ApiResult<Json<Value>> {
+    caller.require(Permission::EditChannels)?;
+    let id = channel_id(&id)?;
+    let history = history(&state)?;
+    let channel = id.to_string();
+    let found = tokio::task::spawn_blocking(move || history.get(&channel, number))
+        .await
+        .map_err(ApiError::internal)?
+        .map_err(ApiError::internal)?
+        .ok_or_else(|| ApiError::not_found(format!("channel {id} has no version {number}")))?;
+    let yaml = found.yaml.ok_or_else(|| {
+        ApiError::bad_request(format!("version {number} records a deletion; pick another"))
+    })?;
+    let config = ChannelConfig::from_yaml(&yaml)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, "invalid_channel", e.to_string()))?;
+    if config.id != id {
+        return Err(ApiError::bad_request(format!(
+            "version {number} defines channel {}, not {id}",
+            config.id
+        )));
+    }
+    validate(&state, &config)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, "invalid_channel", e.to_string()))?;
+    let dir = state.inner.config.channels_dir.clone();
+    let path = find_channel(&dir, id.as_str())
+        .map(|file| file.path)
+        .unwrap_or_else(|| dir.join(format!("{id}.yaml")));
+    atomic_write(&path, yaml.as_bytes()).map_err(ApiError::internal)?;
+    let version = remember(&state, &id, Change::Restored, Some(yaml), caller.actor()).await;
+    audit::record(
+        &state,
+        &caller.actor(),
+        "channel.restored",
+        None,
+        Some(id.clone()),
+        Some(format!("version {number}")),
+    )
+    .await?;
+    Ok(Json(json!({
+        "id": id,
+        "file": file_name(&path),
+        "restored": number,
+        "version": version,
+    })))
 }
 
 async fn load(state: &AppState, id: &ChannelId) -> ApiResult<ChannelConfig> {
@@ -260,6 +392,7 @@ pub(crate) async fn delete(
     let stamp = state.inner.engine.clock().now().unix_millis();
     let target = archive.join(format!("{}.{stamp}", file_name(&file.path)));
     std::fs::rename(&file.path, &target).map_err(ApiError::internal)?;
+    remember(&state, &id, Change::Deleted, None, caller.actor()).await;
     audit::record(
         &state,
         &caller.actor(),

@@ -26,6 +26,10 @@ fn integer() -> Value {
     json!({ "type": "integer", "minimum": 0 })
 }
 
+fn nullable_integer() -> Value {
+    json!({ "type": ["integer", "null"], "minimum": 0 })
+}
+
 fn reference(name: &str) -> Value {
     json!({ "$ref": format!("#/components/schemas/{name}") })
 }
@@ -254,7 +258,165 @@ pub(crate) fn schemas() -> Value {
     );
     map.insert(
         "ChannelSaved".to_owned(),
-        object(&[("id", string()), ("file", string())]),
+        object(&[
+            ("id", string()),
+            ("file", string()),
+            ("version", nullable_integer()),
+        ]),
+    );
+    map.insert(
+        "ChannelVersion".to_owned(),
+        object_with(
+            &[
+                ("channel", string()),
+                ("version", integer()),
+                (
+                    "change",
+                    json!({ "type": "string", "enum": ["saved", "deleted", "restored"] }),
+                ),
+                ("actor", string()),
+                ("at", time()),
+            ],
+            &[("yaml", string())],
+        ),
+    );
+    map.insert(
+        "ChannelHistory".to_owned(),
+        object(&[
+            ("id", string()),
+            ("versions", array(reference("ChannelVersion"))),
+        ]),
+    );
+    map.insert(
+        "ChannelRestored".to_owned(),
+        object(&[
+            ("id", string()),
+            ("file", string()),
+            ("restored", integer()),
+            ("version", nullable_integer()),
+        ]),
+    );
+    map.insert(
+        "Maintenance".to_owned(),
+        object(&[
+            ("enabled", json!({ "type": "boolean" })),
+            ("reason", nullable_string()),
+            ("by", nullable_string()),
+            ("since", nullable_time()),
+        ]),
+    );
+    map.insert(
+        "MaintenanceRequest".to_owned(),
+        object_with(
+            &[("enabled", json!({ "type": "boolean" }))],
+            &[("reason", nullable_string())],
+        ),
+    );
+    let severity = json!({ "type": "string", "enum": ["info", "warning", "critical"] });
+    map.insert(
+        "AlertRule".to_owned(),
+        object(&[
+            ("id", string()),
+            ("kind", string()),
+            ("severity", severity.clone()),
+            ("hold_seconds", nullable_integer()),
+            ("targets", array(string())),
+            ("condition", json!({ "type": "object" })),
+        ]),
+    );
+    map.insert(
+        "AlertTarget".to_owned(),
+        object(&[
+            ("id", string()),
+            ("type", string()),
+            (
+                "min_severity",
+                json!({ "type": ["string", "null"], "enum": ["info", "warning", "critical", null] }),
+            ),
+        ]),
+    );
+    map.insert(
+        "ActiveAlert".to_owned(),
+        object(&[
+            ("rule", string()),
+            ("kind", string()),
+            ("subject", string()),
+            ("severity", severity),
+            ("summary", string()),
+            ("since", time()),
+            ("firing", json!({ "type": "boolean" })),
+            ("notified_at", nullable_time()),
+        ]),
+    );
+    map.insert(
+        "AlertOverview".to_owned(),
+        object(&[
+            ("enabled", json!({ "type": "boolean" })),
+            ("interval_seconds", nullable_integer()),
+            ("repeat_seconds", nullable_integer()),
+            ("rules", array(reference("AlertRule"))),
+            ("targets", array(reference("AlertTarget"))),
+            ("active", array(reference("ActiveAlert"))),
+        ]),
+    );
+    map.insert(
+        "DeviceIdentity".to_owned(),
+        object_with(
+            &[],
+            &[
+                ("name", string()),
+                ("manufacturer", string()),
+                ("model", string()),
+                ("serial_number", string()),
+                ("software_version", string()),
+                ("identifiers", array(string())),
+            ],
+        ),
+    );
+    map.insert(
+        "Device".to_owned(),
+        object(&[
+            ("device", string()),
+            ("channel", nullable_string()),
+            (
+                "status",
+                json!({ "type": "string", "enum": ["online", "silent", "never_seen"] }),
+            ),
+            ("first_seen", nullable_time()),
+            ("last_seen", nullable_time()),
+            ("last_message", nullable_string()),
+            ("messages", integer()),
+            (
+                "silence_after",
+                json!({ "type": ["number", "null"], "minimum": 0 }),
+            ),
+            ("identity", reference("DeviceIdentity")),
+        ]),
+    );
+    map.insert(
+        "DeviceList".to_owned(),
+        object(&[("devices", array(reference("Device")))]),
+    );
+    map.insert(
+        "Backup".to_owned(),
+        object(&[
+            ("name", string()),
+            ("size", integer()),
+            ("modified_at", nullable_time()),
+        ]),
+    );
+    map.insert(
+        "BackupList".to_owned(),
+        object(&[("backups", array(reference("Backup"))), ("keep", integer())]),
+    );
+    map.insert(
+        "BackupCreated".to_owned(),
+        object(&[
+            ("name", string()),
+            ("size", integer()),
+            ("files", integer()),
+            ("created_at", string()),
+        ]),
     );
     map.insert("DestinationState".to_owned(), destination_state);
     map.insert("MessageRecord".to_owned(), object(&record_fields));
@@ -406,6 +568,7 @@ pub(crate) fn schemas() -> Value {
                 "component_types",
                 json!({ "type": "object", "additionalProperties": array(string()) }),
             ),
+            ("maintenance", reference("Maintenance")),
         ]),
     );
     map.insert(

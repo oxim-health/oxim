@@ -47,6 +47,7 @@ dicom-object = "0.10"
 dicom-transfer-syntax-registry = { version = "0.10", default-features = false }
 dicom-ul = { version = "0.10", features = ["async"] }
 encoding_rs = "0.8"
+flate2 = "1"
 fs4 = "1.1"
 fastrand = "2"
 http = "1"
@@ -113,6 +114,7 @@ oxim-x12 = { path = "crates/oxim-x12" }
 rand = { version = "0.10", features = ["thread_rng"] }
 rcgen = "0.14"
 proptest = "1.5"
+tar = { version = "0.4", default-features = false }
 tempfile = "3"
 
 [workspace.lints.rust]
