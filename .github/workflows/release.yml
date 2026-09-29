@@ -1,0 +1,277 @@
+# Builds release artifacts for a version tag (v1.2.3) and prepares a draft
+# GitHub release. Nothing is published before a maintainer reviews the draft,
+# except the container image, which is pushed to GHCR under the version tags.
+#
+# Artifacts per target: offline bundle (tar.gz or zip), deb and rpm (Linux),
+# MSI (Windows). Plus a CycloneDX SBOM, SHA256SUMS and keyless Sigstore
+# signatures for the checksums and the image.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  IMAGE: ghcr.io/oxim-health/oxim
+
+jobs:
+  version:
+    name: Check version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          crate="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "oxim") | .version')"
+          if [ "$tag" != "$crate" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the workspace version $crate"
+            exit 1
+          fi
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux binaries link against glibc 2.28 (Debian 10, RHEL 8 and later).
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-24.04
+            zig: x86_64-unknown-linux-gnu.2.28
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04
+            zig: aarch64-unknown-linux-gnu.2.28
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            msi: x64
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            msi: arm64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install zig
+        if: matrix.zig
+        uses: mlugg/setup-zig@v2
+      - name: Install cargo-zigbuild, cargo-deb and cargo-generate-rpm
+        if: matrix.zig
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild,cargo-deb,cargo-generate-rpm
+
+      - name: Build (Linux)
+        if: matrix.zig
+        run: cargo zigbuild --release --locked -p oxim --target ${{ matrix.zig }}
+      - name: Build
+        if: ${{ !matrix.zig }}
+        run: cargo build --release --locked -p oxim --target ${{ matrix.target }}
+
+      - name: Offline bundle (Linux, macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          deploy/offline/build-bundle.sh --version "$VERSION" --target ${{ matrix.target }} \
+            --binary target/${{ matrix.target }}/release/oxim --out dist
+
+      # The package versions come from Cargo.toml, which the version job
+      # checked against the tag.
+      - name: deb and rpm
+        if: matrix.zig
+        shell: bash
+        run: |
+          cargo deb -p oxim --no-build --no-strip --target ${{ matrix.target }} --output dist/
+          cargo generate-rpm -p crates/oxim --target ${{ matrix.target }} --output dist/
+
+      - name: Offline bundle (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./deploy/offline/build-bundle.ps1 -Version $env:VERSION -Target ${{ matrix.target }} `
+            -Binary target/${{ matrix.target }}/release/oxim.exe -OutDir dist
+
+      - name: MSI
+        if: matrix.msi
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          $env:PATH += ";$env:USERPROFILE\.dotnet\tools"
+          ./deploy/windows/build-msi.ps1 -Version $env:VERSION -Arch ${{ matrix.msi }} `
+            -BinDir target/${{ matrix.target }}/release -OutDir dist
+          Remove-Item -Recurse -Force dist/msi-work
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  sbom:
+    name: SBOM
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-cyclonedx
+      - name: CycloneDX
+        run: |
+          cargo cyclonedx --manifest-path crates/oxim/Cargo.toml --format json \
+            --override-filename oxim-sbom
+          mkdir -p dist
+          mv crates/oxim/oxim-sbom.json "dist/oxim-${{ needs.version.outputs.version }}.cdx.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-sbom
+          path: dist/*
+          if-no-files-found: error
+
+  # Each architecture is built natively and pushed by digest; the manifest
+  # list is assembled and signed afterwards.
+  image:
+    name: Image (${{ matrix.platform }})
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            os: ubuntu-24.04
+          - platform: linux/arm64
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            VERSION=${{ needs.version.outputs.version }}
+            REVISION=${{ github.sha }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,scope=${{ matrix.platform }},mode=max
+      - name: Export digest
+        shell: bash
+        run: |
+          mkdir -p digests
+          touch "digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ strategy.job-index }}
+          path: digests/*
+          if-no-files-found: error
+
+  manifest:
+    name: Image manifest
+    needs: [version, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - name: Create manifest list
+        working-directory: digests
+        shell: bash
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.IMAGE }}@sha256:%s ' *)
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign the image
+        shell: bash
+        run: |
+          digest="$(docker buildx imagetools inspect "${{ env.IMAGE }}:${{ needs.version.outputs.version }}" \
+            --format '{{json .Manifest}}' | jq -r .digest)"
+          cosign sign --yes "${{ env.IMAGE }}@${digest}"
+
+  release:
+    name: Draft release
+    needs: [version, build, sbom, manifest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        shell: bash
+        run: |
+          rm -f ./*.sha256
+          sha256sum -- * | LC_ALL=C sort -k 2 > SHA256SUMS
+          cat SHA256SUMS
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign the checksums
+        working-directory: dist
+        run: cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          name: OXIM ${{ needs.version.outputs.version }}
+          generate_release_notes: true
+          files: dist/*
+          fail_on_unmatched_files: true

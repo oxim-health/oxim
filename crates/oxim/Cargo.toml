@@ -35,6 +35,70 @@ tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
 
+# Linux packages: `cargo deb -p oxim` and `cargo generate-rpm -p crates/oxim`
+# (see deploy/README.md). Paths are relative to this directory, except
+# `target/release/`, which the tools map to the build output.
+[package.metadata.deb]
+name = "oxim"
+maintainer = "The OXIM Contributors <maintainers@oxim.invalid>"
+copyright = "The OXIM Contributors"
+extended-description = """\
+OXIM receives, transforms and delivers clinical messages between laboratory \
+analyzers, point-of-care devices, LIS, HIS and other systems (HL7 v2, ASTM, \
+POCT1-A, FHIR). It runs as a systemd service with a local SQLite store and \
+never contacts external services on its own."""
+section = "net"
+priority = "optional"
+# Explicit rather than $auto, which needs the target's shared libraries when
+# cross-compiling. SQLite and TLS are linked statically; release binaries
+# need glibc 2.28.
+depends = "libc6 (>= 2.28), libgcc-s1 | libgcc1, adduser"
+recommends = "systemd"
+maintainer-scripts = "../../deploy/debian/"
+conf-files = ["/etc/oxim/oxim.yaml"]
+assets = [
+    ["target/release/oxim", "usr/bin/", "755"],
+    ["../../deploy/linux/oxim.yaml", "etc/oxim/oxim.yaml", "640"],
+    ["../../deploy/systemd/oxim.service", "usr/lib/systemd/system/oxim.service", "644"],
+    ["../../deploy/systemd/oxim.service.d/10-package.conf", "usr/lib/systemd/system/oxim.service.d/10-package.conf", "644"],
+    ["../../deploy/systemd/sysusers.d/oxim.conf", "usr/lib/sysusers.d/oxim.conf", "644"],
+    ["../../deploy/systemd/tmpfiles.d/oxim.conf", "usr/lib/tmpfiles.d/oxim.conf", "644"],
+    ["../../deploy/examples/channels/*", "usr/share/doc/oxim/examples/channels/", "644"],
+    ["../../deploy/examples/tables/*", "usr/share/doc/oxim/examples/tables/", "644"],
+    ["../../docs/install/*.md", "usr/share/doc/oxim/install/", "644"],
+    ["README.md", "usr/share/doc/oxim/README.md", "644"],
+    ["../../LICENSE-MIT", "usr/share/doc/oxim/LICENSE-MIT", "644"],
+    ["../../LICENSE-APACHE", "usr/share/doc/oxim/LICENSE-APACHE", "644"],
+]
+
+[package.metadata.generate-rpm]
+name = "oxim"
+summary = "Open-source clinical integration engine"
+license = "MIT OR Apache-2.0"
+release = "1"
+pre_install_script = "../../deploy/rpm/pre-install.sh"
+post_install_script = "../../deploy/rpm/post-install.sh"
+pre_uninstall_script = "../../deploy/rpm/pre-uninstall.sh"
+post_uninstall_script = "../../deploy/rpm/post-uninstall.sh"
+assets = [
+    { source = "target/release/oxim", dest = "/usr/bin/oxim", mode = "755" },
+    { source = "../../deploy/linux/oxim.yaml", dest = "/etc/oxim/oxim.yaml", mode = "640", config = "noreplace" },
+    { source = "../../deploy/systemd/oxim.service", dest = "/usr/lib/systemd/system/oxim.service", mode = "644" },
+    { source = "../../deploy/systemd/oxim.service.d/10-package.conf", dest = "/usr/lib/systemd/system/oxim.service.d/10-package.conf", mode = "644" },
+    { source = "../../deploy/systemd/sysusers.d/oxim.conf", dest = "/usr/lib/sysusers.d/oxim.conf", mode = "644" },
+    { source = "../../deploy/systemd/tmpfiles.d/oxim.conf", dest = "/usr/lib/tmpfiles.d/oxim.conf", mode = "644" },
+    { source = "../../deploy/examples/channels/*", dest = "/usr/share/doc/oxim/examples/channels/", mode = "644", doc = true },
+    { source = "../../deploy/examples/tables/*", dest = "/usr/share/doc/oxim/examples/tables/", mode = "644", doc = true },
+    { source = "../../docs/install/*.md", dest = "/usr/share/doc/oxim/install/", mode = "644", doc = true },
+    { source = "README.md", dest = "/usr/share/doc/oxim/README.md", mode = "644", doc = true },
+    { source = "../../LICENSE-MIT", dest = "/usr/share/licenses/oxim/LICENSE-MIT", mode = "644", doc = true },
+    { source = "../../LICENSE-APACHE", dest = "/usr/share/licenses/oxim/LICENSE-APACHE", mode = "644", doc = true },
+]
+
+[package.metadata.generate-rpm.requires]
+shadow-utils = "*"
+systemd = "*"
+
 [target.'cfg(windows)'.dependencies]
 windows-service.workspace = true
 
