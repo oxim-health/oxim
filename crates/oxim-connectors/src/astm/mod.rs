@@ -33,7 +33,7 @@ use tracing::warn;
 
 pub use raw::{AstmRawTcpSettings, AstmRawTcpSource};
 
-use self::link::{Link, LinkOptions, SendFailure, Transport};
+use self::link::{LazyLink, LinkOptions, SendFailure, Transport};
 use crate::serial::{FlowControl, Parity, PortSettings};
 
 /// Parses connector settings into their typed form.
@@ -267,20 +267,21 @@ impl AstmSerialSettings {
 /// them before acknowledging their final frame.
 #[derive(Debug)]
 pub struct AstmSource {
-    link: Arc<Link>,
+    link: LazyLink,
 }
 
 #[async_trait]
 impl SourceConnector for AstmSource {
     async fn run(&self, context: SourceContext) -> Result<(), ConnectorError> {
+        let link = self.link.get().map_err(|e| ConnectorError(e.to_string()))?;
         let (sender, mut inbox) = mpsc::channel(8);
-        let _attachment = self.link.attach(sender).map_err(ConnectorError)?;
+        let _attachment = link.attach(sender).map_err(ConnectorError)?;
         loop {
             tokio::select! {
                 () = context.cancelled() => return Ok(()),
                 inbound = inbox.recv() => {
                     let Some(inbound) = inbound else {
-                        return Err(ConnectorError(format!("ASTM link {} stopped", self.link.key())));
+                        return Err(ConnectorError(format!("ASTM link {} stopped", link.key())));
                     };
                     let info = SubmitInfo {
                         peer: Some(inbound.peer),
@@ -288,7 +289,7 @@ impl SourceConnector for AstmSource {
                     };
                     let stored = context.submit(inbound.text, info).await;
                     if let Err(error) = &stored {
-                        warn!(link = self.link.key(), %error, "cannot store an ASTM message; the analyzer will retransmit it");
+                        warn!(link = link.key(), %error, "cannot store an ASTM message; the analyzer will retransmit it");
                     }
                     if let Some(confirm) = inbound.confirm {
                         let _ = confirm.send(stored.is_ok());
@@ -303,18 +304,18 @@ impl SourceConnector for AstmSource {
 /// link.
 #[derive(Debug)]
 pub struct AstmDestination {
-    link: Arc<Link>,
+    link: LazyLink,
     send_timeout: Duration,
 }
 
 #[async_trait]
 impl DestinationConnector for AstmDestination {
     async fn send(&self, delivery: &Delivery) -> Result<Option<Vec<u8>>, SendError> {
-        match self
+        let link = self
             .link
-            .send(delivery.payload.clone(), self.send_timeout)
-            .await
-        {
+            .get()
+            .map_err(|e| SendError::temporary(e.to_string()))?;
+        match link.send(delivery.payload.clone(), self.send_timeout).await {
             Ok(()) => Ok(None),
             Err(SendFailure::Invalid(message)) => Err(SendError::permanent(message)),
             Err(SendFailure::Failed(message)) => Err(SendError::temporary(message)),
@@ -328,30 +329,34 @@ pub fn register(registry: &mut Registry) {
         .add_source("astm-tcp", |config| {
             let settings: AstmTcpSettings = parse("astm-tcp", &config.settings)?;
             let (transport, options, _) = settings.link()?;
+            link::check(&transport, &options)?;
             Ok(Arc::new(AstmSource {
-                link: link::acquire(transport, options)?,
+                link: LazyLink::new(transport, options),
             }) as Arc<dyn SourceConnector>)
         })
         .add_destination("astm-tcp", |config| {
             let settings: AstmTcpSettings = parse("astm-tcp", &config.settings)?;
             let (transport, options, send_timeout) = settings.link()?;
+            link::check(&transport, &options)?;
             Ok(Arc::new(AstmDestination {
-                link: link::acquire(transport, options)?,
+                link: LazyLink::new(transport, options),
                 send_timeout,
             }) as Arc<dyn DestinationConnector>)
         })
         .add_source("astm-serial", |config| {
             let settings: AstmSerialSettings = parse("astm-serial", &config.settings)?;
             let (transport, options, _) = settings.link()?;
+            link::check(&transport, &options)?;
             Ok(Arc::new(AstmSource {
-                link: link::acquire(transport, options)?,
+                link: LazyLink::new(transport, options),
             }) as Arc<dyn SourceConnector>)
         })
         .add_destination("astm-serial", |config| {
             let settings: AstmSerialSettings = parse("astm-serial", &config.settings)?;
             let (transport, options, send_timeout) = settings.link()?;
+            link::check(&transport, &options)?;
             Ok(Arc::new(AstmDestination {
-                link: link::acquire(transport, options)?,
+                link: LazyLink::new(transport, options),
                 send_timeout,
             }) as Arc<dyn DestinationConnector>)
         })

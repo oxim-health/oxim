@@ -113,6 +113,59 @@ impl Drop for Link {
 
 static LINKS: LazyLock<Mutex<HashMap<String, Weak<Link>>>> = LazyLock::new(Mutex::default);
 
+/// Checks, without starting anything, that a running link for `transport`
+/// does not use different settings. Connector factories call this so that
+/// conflicts are reported when a channel is deployed, while the link itself
+/// only starts when the connector is first used.
+pub(crate) fn check(transport: &Transport, options: &LinkOptions) -> Result<(), EngineError> {
+    let key = transport.key();
+    let links = LINKS
+        .lock()
+        .map_err(|_| EngineError::Config("the ASTM link registry is unavailable".into()))?;
+    match links.get(&key).and_then(Weak::upgrade) {
+        Some(link) if link.transport != *transport || link.options != *options => {
+            Err(EngineError::Config(format!(
+                "ASTM link {key} is already in use with different settings; connectors \
+                 sharing a link must use the same link settings"
+            )))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// A link that is acquired on first use, so building a connector (for
+/// example to validate a configuration) never opens ports or devices.
+#[derive(Debug)]
+pub(crate) struct LazyLink {
+    transport: Transport,
+    options: LinkOptions,
+    link: Mutex<Option<Arc<Link>>>,
+}
+
+impl LazyLink {
+    pub(crate) fn new(transport: Transport, options: LinkOptions) -> Self {
+        Self {
+            transport,
+            options,
+            link: Mutex::new(None),
+        }
+    }
+
+    /// The running link, starting or joining it on first use.
+    pub(crate) fn get(&self) -> Result<Arc<Link>, EngineError> {
+        let mut slot = self
+            .link
+            .lock()
+            .map_err(|_| EngineError::Config("the ASTM link handle is unavailable".into()))?;
+        if let Some(link) = slot.as_ref() {
+            return Ok(link.clone());
+        }
+        let link = acquire(self.transport.clone(), self.options)?;
+        *slot = Some(link.clone());
+        Ok(link)
+    }
+}
+
 /// Returns the running link for `transport`, starting it if needed.
 pub(crate) fn acquire(
     transport: Transport,

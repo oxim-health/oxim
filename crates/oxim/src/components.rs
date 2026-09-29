@@ -1,11 +1,20 @@
 //! The component types available to channel files.
 
 use oxim_core::Registry;
+use oxim_transform::TransformEnvironment;
 
 use crate::settings::Settings;
 
 /// Builds the registry with every connector, step, normalizer and encoder
-/// shipped with OXIM.
-pub(crate) fn registry(_settings: &Settings) -> Registry {
-    Registry::new()
+/// shipped with OXIM. Code tables are read from the configured tables
+/// directory.
+pub(crate) fn registry(settings: &Settings) -> Registry {
+    let mut registry = Registry::new();
+    oxim_connectors::register(&mut registry);
+    oxim_mapping::register(&mut registry);
+    oxim_transform::register(
+        &mut registry,
+        TransformEnvironment::new(settings.tables_dir.clone()),
+    );
+    registry
 }

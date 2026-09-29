@@ -116,7 +116,8 @@ enum ServiceCommand {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let mut out = std::io::stdout().lock();
+    // Not locked: engine threads log to standard output while commands run.
+    let mut out = std::io::stdout();
     let result = match cli.command {
         Command::Run => run_foreground(&cli.config),
         Command::Init { dir, force } => init::init(&dir, force, &mut out),
