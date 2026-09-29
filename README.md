@@ -21,6 +21,7 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 |---|---|
 | [`crates/oxim-hl7`](crates/oxim-hl7) | Lossless HL7 v2 parsing, editing, serialization and acknowledgments |
 | [`crates/oxim-mllp`](crates/oxim-mllp) | Sans-IO MLLP framing |
+| [`crates/oxim-model`](crates/oxim-model) | Message envelope, identifiers and the normalized, FHIR-aligned clinical model |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |
 | [`fuzz`](fuzz) | Fuzz targets (cargo-fuzz) |
