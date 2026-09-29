@@ -34,6 +34,7 @@ pub use sqlite::SqliteStore;
 pub use types::{
     AuditEvent, Content, Delivery, DeliveryOutcome, DestinationState, MessageQuery, MessageRecord,
     Processed, PrunePolicy, PruneReport, QueueOrdering, QueueStats, RecoveryReport, Stage,
+    StatusCounts,
 };
 
 /// Durable storage for messages, their contents, delivery queues and the
@@ -136,6 +137,12 @@ pub trait MessageStore: Send {
 
     /// Appends an event to the audit trail.
     fn record_audit(&mut self, event: &AuditEvent) -> StoreResult<()>;
+
+    /// Messages and deliveries counted by state, for metrics. The default
+    /// implementation reports nothing; stores should override it.
+    fn status_counts(&self) -> StoreResult<StatusCounts> {
+        Ok(StatusCounts::default())
+    }
 
     /// Audit events, newest first, optionally only for one message.
     fn audit_trail(&self, message: Option<MessageId>, limit: usize)

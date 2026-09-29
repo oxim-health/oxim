@@ -521,3 +521,41 @@ fn keeps_an_audit_trail() {
     store.erase(&ids).unwrap();
     assert_eq!(store.audit_trail(None, 10).unwrap().len(), 3);
 }
+
+#[test]
+fn counts_messages_and_deliveries_by_status() {
+    let (mut store, ids) = store_with(2, &["lis"]);
+    store
+        .next_delivery(&channel(), &dest("lis"), QueueOrdering::Strict, at(100))
+        .unwrap()
+        .unwrap();
+    store
+        .complete_delivery(
+            ids[0],
+            &dest("lis"),
+            &DeliveryOutcome::Sent { response: None },
+            at(100),
+        )
+        .unwrap();
+    let counts = store.status_counts().unwrap();
+    assert!(
+        counts
+            .messages
+            .contains(&(channel(), MessageStatus::Completed, 1))
+    );
+    assert!(
+        counts
+            .messages
+            .contains(&(channel(), MessageStatus::Transformed, 1))
+    );
+    assert!(
+        counts
+            .deliveries
+            .contains(&(channel(), dest("lis"), DestinationStatus::Sent, 1))
+    );
+    assert!(
+        counts
+            .deliveries
+            .contains(&(channel(), dest("lis"), DestinationStatus::Queued, 1))
+    );
+}
