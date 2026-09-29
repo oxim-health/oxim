@@ -1,0 +1,224 @@
+//! Running the engine: deployment, live reload of channel files, retention
+//! and shutdown.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::future::Future;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
+
+use oxim_core::{ChannelConfig, Engine, EngineError, EngineOptions, SystemClock};
+use oxim_model::{ChannelId, Timestamp};
+use oxim_store::{PrunePolicy, SqliteStore};
+use tracing::{error, info, warn};
+
+use crate::CliResult;
+use crate::components;
+use crate::settings::Settings;
+
+/// Runs the engine until `shutdown` completes.
+pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) -> CliResult<()> {
+    std::fs::create_dir_all(&settings.data_dir)
+        .map_err(|e| format!("cannot create {}: {e}", settings.data_dir.display()))?;
+    let database = settings.database_path();
+    let store = SqliteStore::open(&database)
+        .map_err(|e| format!("cannot open {}: {e}", database.display()))?;
+    let mut options = EngineOptions::default();
+    options.processing_queue = settings.engine.processing_queue;
+    options.shutdown_grace = settings.engine.shutdown_grace.0;
+    options.idle_poll = settings.engine.idle_poll.0;
+    let engine = Engine::start(
+        Box::new(store),
+        components::registry(&settings),
+        Arc::new(SystemClock),
+        options,
+    )
+    .await?;
+    info!(
+        version = env!("CARGO_PKG_VERSION"),
+        database = %database.display(),
+        channels = %settings.channels_dir.display(),
+        "OXIM started"
+    );
+
+    let mut watcher = ChannelWatcher::new(settings.channels_dir.clone());
+    watcher.sync(&engine).await;
+    let reload = settings.reload.enabled.then(|| {
+        let engine = engine.clone();
+        let interval = settings.reload.interval.0;
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(interval).await;
+                watcher.sync(&engine).await;
+            }
+        })
+    });
+    let retention = tokio::spawn(retention_loop(engine.clone(), settings.clone()));
+
+    shutdown.await;
+    info!("stopping");
+    if let Some(reload) = reload {
+        reload.abort();
+    }
+    retention.abort();
+    engine.shutdown().await;
+    info!("OXIM stopped");
+    Ok(())
+}
+
+/// Resolves when the process is asked to stop: Ctrl+C everywhere, and
+/// SIGTERM on Unix.
+pub(crate) async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        match signal(SignalKind::terminate()) {
+            Ok(mut terminate) => {
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = terminate.recv() => {}
+                }
+            }
+            Err(_) => {
+                let _ = tokio::signal::ctrl_c().await;
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
+async fn retention_loop(engine: Engine, settings: Settings) {
+    let retention = settings.retention;
+    if retention.contents_after.is_none() && retention.messages_after.is_none() {
+        return;
+    }
+    loop {
+        let now = engine.clock().now();
+        let before = |age: Duration| {
+            let nanos = i64::try_from(age.as_nanos()).unwrap_or(i64::MAX);
+            Timestamp::from_unix_nanos(now.unix_nanos().saturating_sub(nanos))
+        };
+        let policy = PrunePolicy {
+            contents_before: retention.contents_after.map(|age| before(age.0)),
+            messages_before: retention.messages_after.map(|age| before(age.0)),
+        };
+        match engine.store().run(move |store| store.prune(&policy)).await {
+            Ok(report) if report.contents_pruned + report.messages_pruned > 0 => info!(
+                contents = report.contents_pruned,
+                messages = report.messages_pruned,
+                "retention pruned completed messages"
+            ),
+            Ok(_) => {}
+            Err(e) => error!(error = %e, "retention failed"),
+        }
+        tokio::time::sleep(retention.interval.0).await;
+    }
+}
+
+/// Keeps deployed channels in line with the files in the channel directory.
+pub(crate) struct ChannelWatcher {
+    directory: PathBuf,
+    /// Last seen text and the channel it defined, per file.
+    files: BTreeMap<PathBuf, (String, Option<ChannelId>)>,
+}
+
+impl ChannelWatcher {
+    pub(crate) fn new(directory: PathBuf) -> Self {
+        Self {
+            directory,
+            files: BTreeMap::new(),
+        }
+    }
+
+    fn channel_files(directory: &Path) -> Vec<PathBuf> {
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            return Vec::new();
+        };
+        let mut paths: Vec<_> = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|ext| ext == "yaml" || ext == "yml")
+            })
+            .collect();
+        paths.sort();
+        paths
+    }
+
+    /// Deploys new and changed channels and undeploys removed or disabled
+    /// ones. A file that fails to parse keeps its previous deployment.
+    pub(crate) async fn sync(&mut self, engine: &Engine) {
+        let paths = Self::channel_files(&self.directory);
+        let present: BTreeSet<PathBuf> = paths.iter().cloned().collect();
+
+        let removed: Vec<PathBuf> = self
+            .files
+            .keys()
+            .filter(|path| !present.contains(*path))
+            .cloned()
+            .collect();
+        for path in removed {
+            if let Some((_, Some(channel))) = self.files.remove(&path) {
+                info!(%channel, file = %path.display(), "channel file removed");
+                undeploy(engine, &channel).await;
+            }
+        }
+
+        for path in paths {
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                warn!(file = %path.display(), "cannot read channel file");
+                continue;
+            };
+            if self.files.get(&path).is_some_and(|(seen, _)| *seen == text) {
+                continue;
+            }
+            let previous = self.files.get(&path).and_then(|(_, id)| id.clone());
+            let config = match ChannelConfig::from_yaml(&text) {
+                Ok(config) => config,
+                Err(e) => {
+                    error!(file = %path.display(), error = %e, "invalid channel file; keeping the previous deployment");
+                    self.files.insert(path, (text, previous));
+                    continue;
+                }
+            };
+            let taken_elsewhere = self
+                .files
+                .iter()
+                .any(|(other, (_, id))| *other != path && id.as_ref() == Some(&config.id));
+            if taken_elsewhere {
+                error!(channel = %config.id, file = %path.display(), "channel identifier already used by another file");
+                self.files.insert(path, (text, previous));
+                continue;
+            }
+            if let Some(previous) = previous.as_ref().filter(|id| **id != config.id) {
+                undeploy(engine, previous).await;
+            }
+            let id = config.id.clone();
+            if config.enabled {
+                match engine.redeploy(config).await {
+                    Ok(()) => {
+                        info!(channel = %id, file = %path.display(), "channel deployed from file")
+                    }
+                    Err(e) => {
+                        error!(channel = %id, file = %path.display(), error = %e, "cannot deploy channel")
+                    }
+                }
+            } else {
+                undeploy(engine, &id).await;
+                info!(channel = %id, "channel disabled");
+            }
+            self.files.insert(path, (text, Some(id)));
+        }
+    }
+}
+
+async fn undeploy(engine: &Engine, channel: &ChannelId) {
+    match engine.undeploy(channel).await {
+        Ok(()) | Err(EngineError::NotDeployed(_)) => {}
+        Err(e) => error!(%channel, error = %e, "cannot undeploy channel"),
+    }
+}
