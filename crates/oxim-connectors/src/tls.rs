@@ -136,8 +136,11 @@ fn provider() -> Arc<rustls::crypto::CryptoProvider> {
     Arc::new(rustls::crypto::ring::default_provider())
 }
 
-/// Builds the acceptor of a listener.
-pub(crate) fn acceptor(settings: &ServerTlsSettings) -> Result<TlsAcceptor, EngineError> {
+/// The rustls configuration of a listener, for protocols that run the
+/// handshake themselves (such as DICOM associations).
+pub fn server_config(
+    settings: &ServerTlsSettings,
+) -> Result<Arc<rustls::ServerConfig>, EngineError> {
     let builder = rustls::ServerConfig::builder_with_provider(provider())
         .with_safe_default_protocol_versions()
         .map_err(|e| config_error(e.to_string()))?;
@@ -164,7 +167,12 @@ pub(crate) fn acceptor(settings: &ServerTlsSettings) -> Result<TlsAcceptor, Engi
             private_key(&settings.key_file)?,
         )
         .map_err(|e| config_error(format!("certificate and key: {e}")))?;
-    Ok(TlsAcceptor::from(Arc::new(config)))
+    Ok(Arc::new(config))
+}
+
+/// Builds the acceptor of a listener.
+pub(crate) fn acceptor(settings: &ServerTlsSettings) -> Result<TlsAcceptor, EngineError> {
+    Ok(TlsAcceptor::from(server_config(settings)?))
 }
 
 /// A connector for a sender, with the name to verify.
@@ -195,8 +203,13 @@ fn host_of(target: &str) -> &str {
     }
 }
 
-/// Builds the TLS client of a sender connecting to `target`.
-pub(crate) fn client(settings: &ClientTlsSettings, target: &str) -> Result<Client, EngineError> {
+/// The rustls configuration of a sender connecting to `target` and the name
+/// the server certificate must match, for protocols that run the handshake
+/// themselves (such as DICOM associations).
+pub fn client_config(
+    settings: &ClientTlsSettings,
+    target: &str,
+) -> Result<(Arc<rustls::ClientConfig>, String), EngineError> {
     let mut store = RootCertStore::empty();
     if settings.system_roots {
         let native = rustls_native_certs::load_native_certs();
@@ -236,10 +249,18 @@ pub(crate) fn client(settings: &ClientTlsSettings, target: &str) -> Result<Clien
         .server_name
         .clone()
         .unwrap_or_else(|| host_of(target).to_owned());
+    ServerName::try_from(name.clone())
+        .map_err(|e| config_error(format!("invalid server name {name:?}: {e}")))?;
+    Ok((Arc::new(config), name))
+}
+
+/// Builds the TLS client of a sender connecting to `target`.
+pub(crate) fn client(settings: &ClientTlsSettings, target: &str) -> Result<Client, EngineError> {
+    let (config, name) = client_config(settings, target)?;
     let server_name = ServerName::try_from(name.clone())
         .map_err(|e| config_error(format!("invalid server name {name:?}: {e}")))?;
     Ok(Client {
-        connector: TlsConnector::from(Arc::new(config)),
+        connector: TlsConnector::from(config),
         server_name,
     })
 }

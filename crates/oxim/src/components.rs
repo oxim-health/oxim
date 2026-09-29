@@ -19,8 +19,8 @@ pub(crate) struct Components {
 
 /// Builds the registry with every connector, step, normalizer and encoder
 /// shipped with OXIM. Code and routing tables are read from the configured
-/// tables directory; lab orders and the device registry live in the data
-/// directory.
+/// tables directory; lab orders, the device registry, the DICOM instance
+/// index and the modality worklist are kept in the data directory.
 pub(crate) fn registry(settings: &Settings) -> Registry {
     build(settings).registry
 }
@@ -32,7 +32,10 @@ pub(crate) fn build(settings: &Settings) -> Components {
     oxim_connectors::register(&mut registry);
     oxim_mapping::register(&mut registry);
     oxim_fhir::register(&mut registry);
-    oxim_dicom::register(&mut registry);
+    oxim_dicom::register_with(
+        &mut registry,
+        &oxim_dicom::DicomEnvironment::new(settings.data_dir.clone()),
+    );
     oxim_cda::register(&mut registry);
     oxim_transform::register(
         &mut registry,
