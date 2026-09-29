@@ -91,6 +91,13 @@ impl Encoder for OruEncoder {
             data: message.to_bytes(),
         })
     }
+
+    fn handles(&self, context: &MessageContext) -> bool {
+        matches!(
+            context.clinical,
+            Some(ClinicalContent::Results { .. } | ClinicalContent::QualityControl { .. })
+        )
+    }
 }
 
 /// Encodes orders as HL7 v2 `OML^O21`.
@@ -115,6 +122,10 @@ impl Encoder for OmlEncoder {
             data: message.to_bytes(),
         })
     }
+
+    fn handles(&self, context: &MessageContext) -> bool {
+        matches!(context.clinical, Some(ClinicalContent::Orders { .. }))
+    }
 }
 
 /// Encodes orders as ASTM records, for worklist download or as the answer
@@ -134,6 +145,10 @@ impl Encoder for AstmOrdersEncoder {
             data_type: DataType::Astm,
             data: message.to_bytes(),
         })
+    }
+
+    fn handles(&self, context: &MessageContext) -> bool {
+        matches!(context.clinical, Some(ClinicalContent::Orders { .. }))
     }
 }
 
@@ -157,6 +172,10 @@ impl Encoder for ClinicalJsonEncoder {
             data_type: DataType::Json,
             data,
         })
+    }
+
+    fn handles(&self, context: &MessageContext) -> bool {
+        context.clinical.is_some()
     }
 }
 

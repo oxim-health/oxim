@@ -753,6 +753,7 @@ dependencies = [
  "clap",
  "oxim-connectors",
  "oxim-core",
+ "oxim-lab",
  "oxim-mapping",
  "oxim-model",
  "oxim-store",
@@ -849,6 +850,25 @@ dependencies = [
  "memchr",
  "proptest",
  "thiserror",
+]
+
+[[package]]
+name = "oxim-lab"
+version = "0.0.0"
+dependencies = [
+ "oxim-astm",
+ "oxim-core",
+ "oxim-formats",
+ "oxim-mapping",
+ "oxim-model",
+ "oxim-store",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

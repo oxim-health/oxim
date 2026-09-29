@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use oxim_core::{ChannelConfig, Engine, EngineError, EngineOptions, SystemClock};
+use oxim_lab::OrderCache;
 use oxim_model::{ChannelId, Timestamp};
 use oxim_store::{PrunePolicy, SqliteStore};
 use tracing::{error, info, warn};
@@ -92,9 +93,13 @@ pub(crate) async fn shutdown_signal() {
 
 async fn retention_loop(engine: Engine, settings: Settings) {
     let retention = settings.retention;
-    if retention.contents_after.is_none() && retention.messages_after.is_none() {
+    if retention.contents_after.is_none()
+        && retention.messages_after.is_none()
+        && retention.orders_after.is_none()
+    {
         return;
     }
+    let orders = settings.orders_path();
     loop {
         let now = engine.clock().now();
         let before = |age: Duration| {
@@ -113,6 +118,23 @@ async fn retention_loop(engine: Engine, settings: Settings) {
             ),
             Ok(_) => {}
             Err(e) => error!(error = %e, "retention failed"),
+        }
+        // The order cache exists once a lab channel has used it.
+        if let Some(age) = retention.orders_after
+            && orders.exists()
+        {
+            let path = orders.clone();
+            let cutoff = before(age.0);
+            let pruned = tokio::task::spawn_blocking(move || {
+                OrderCache::open(&path).and_then(|cache| cache.prune(cutoff))
+            })
+            .await;
+            match pruned {
+                Ok(Ok(0)) => {}
+                Ok(Ok(count)) => info!(orders = count, "retention pruned cached lab orders"),
+                Ok(Err(e)) => error!(error = %e, "order cache retention failed"),
+                Err(e) => error!(error = %e, "order cache retention failed"),
+            }
         }
         tokio::time::sleep(retention.interval.0).await;
     }

@@ -242,7 +242,19 @@ impl Registry {
             })
             .collect::<Result<Vec<_>, EngineError>>()
             .map_err(with_channel)?;
+        let reply_encoder = match channel
+            .source
+            .response
+            .as_ref()
+            .and_then(|response| response.encoder.as_ref())
+        {
+            Some(step) => Some(
+                Self::build(&self.encoders, "encoder", &step.kind, step).map_err(with_channel)?,
+            ),
+            None => None,
+        };
         Ok(CompiledPipeline {
+            reply_encoder,
             parser: DocumentParser::new(channel.source.data_type, channel.source.format.as_ref())
                 .map_err(with_channel)?,
             normalizer,

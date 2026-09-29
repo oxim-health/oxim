@@ -31,8 +31,8 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-sim`](crates/oxim-sim) | Simulated analyzers (ASTM), LIS systems (MLLP) and POCT devices, with synthetic data and load tests |
 | [`crates/oxim-transform`](crates/oxim-transform) | Declarative filters, mapping operations and code tables |
 | [`crates/oxim-mapping`](crates/oxim-mapping) | Mappings between HL7 v2, ASTM, POCT1-A and the normalized clinical model (normalizers and encoders) |
-| [`crates/oxim-connectors`](crates/oxim-connectors) | Connectors: MLLP, raw TCP, files and HTTP |
-| [`crates/oxim-connectors`](crates/oxim-connectors) | Source and destination connectors (ASTM over TCP and serial, POCT1-A, ...) |
+| [`crates/oxim-lab`](crates/oxim-lab) | Laboratory workflows: order cache, host query answers, test routing and worklist download |
+| [`crates/oxim-connectors`](crates/oxim-connectors) | Source and destination connectors: MLLP, raw TCP, files, HTTP, ASTM over TCP and serial, POCT1-A |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |
 | [`fuzz`](fuzz) | Fuzz targets (cargo-fuzz) |

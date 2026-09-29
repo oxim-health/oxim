@@ -119,6 +119,11 @@ pub struct ResponseConfig {
     /// How long the sender may wait for the reply.
     #[serde(default = "response_timeout_default")]
     pub timeout: DurationText,
+    /// For `mode: pipeline`: the encoder that turns the processed message
+    /// into the reply, for example `astm-query-response`. Without it a
+    /// pipeline step must set the reply itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoder: Option<StepConfig>,
 }
 
 fn response_timeout_default() -> DurationText {
@@ -441,6 +446,12 @@ impl ChannelConfig {
                 {
                     return Err(EngineError::Config(format!(
                         "channel {}: response destination {target} is not a destination of the channel",
+                        self.id
+                    )));
+                }
+                (ResponseMode::Destination, Some(_)) if response.encoder.is_some() => {
+                    return Err(EngineError::Config(format!(
+                        "channel {}: a response `encoder` needs `mode: pipeline`",
                         self.id
                     )));
                 }

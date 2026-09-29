@@ -8,13 +8,14 @@ use crate::CliResult;
 const SETTINGS: &str = "\
 # OXIM engine configuration. Relative paths are resolved against this file.
 
-# Where the message database (oxim.db) is stored.
+# Where the message database (oxim.db) and the lab order cache (orders.db)
+# are stored.
 data_dir: data
 
 # Channel files (*.yaml). Changes are picked up while OXIM runs.
 channels_dir: channels
 
-# Code tables referenced by channel steps.
+# Code and routing tables referenced by channel steps.
 tables_dir: tables
 
 log:
@@ -25,6 +26,7 @@ log:
 retention:
   contents_after: 90d  # delete message contents of completed messages
   messages_after: 365d # delete completed messages entirely
+  orders_after: 90d    # delete cached lab orders not changed since
   interval: 1h
 
 reload:
