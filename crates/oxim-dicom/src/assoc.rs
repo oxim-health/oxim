@@ -16,7 +16,9 @@ use dicom_ul::association::{
     Association, AsyncClientAssociation, AsyncServerAssociation, Error as UlError,
 };
 use dicom_ul::pdu::{PDataValueType, Pdu, PresentationContextNegotiated};
-use oxim_connectors::tls::{ClientTlsSettings, ServerTlsSettings, client_config, server_config};
+use oxim_connectors::tls::{
+    ClientTlsSettings, ServerTlsSettings, client_config, server_config, server_name_text,
+};
 use oxim_core::{EngineError, SendError};
 use tokio::net::TcpStream;
 
@@ -310,7 +312,9 @@ impl Peer {
         validate_ae_title("calling_ae_title", settings.calling_ae_title)?;
         let tls = settings
             .tls
-            .map(|tls| client_config(tls, target))
+            .map(|tls| {
+                client_config(tls).map(|config| (Arc::new(config), server_name_text(tls, target)))
+            })
             .transpose()?;
         Ok(Self {
             target: target.to_owned(),

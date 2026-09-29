@@ -44,6 +44,10 @@ exceptions = [
     { allow = ["CC0-1.0"], crate = "encoding-index-singlebyte" },
     { allow = ["CC0-1.0"], crate = "encoding-index-tradchinese" },
     { allow = ["CC0-1.0"], crate = "encoding_index_tests" },
+    # Mozilla's root certificate list, bundled by mysql_async's rustls
+    # support (used by oxim-connectors-db). CDLA-Permissive-2.0 is a
+    # permissive data license with no copyleft terms.
+    { allow = ["CDLA-Permissive-2.0"], crate = "webpki-roots" },
 ]
 
 [bans]
