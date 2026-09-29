@@ -14,7 +14,9 @@ oxim-astm = { path = "../crates/oxim-astm" }
 oxim-formats = { path = "../crates/oxim-formats" }
 oxim-hl7 = { path = "../crates/oxim-hl7" }
 oxim-mllp = { path = "../crates/oxim-mllp" }
+oxim-ncpdp = { path = "../crates/oxim-ncpdp" }
 oxim-poct1a = { path = "../crates/oxim-poct1a" }
+oxim-x12 = { path = "../crates/oxim-x12" }
 
 # Not part of the main workspace: fuzzing needs a nightly toolchain.
 [workspace]
@@ -86,6 +88,20 @@ bench = false
 [[bin]]
 name = "poct1a_message"
 path = "fuzz_targets/poct1a_message.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "x12_interchange"
+path = "fuzz_targets/x12_interchange.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ncpdp_transmission"
+path = "fuzz_targets/ncpdp_transmission.rs"
 test = false
 doc = false
 bench = false

@@ -101,6 +101,8 @@ jobs:
           - formats_delimited
           - poct1a_stream
           - poct1a_message
+          - x12_interchange
+          - ncpdp_transmission
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

@@ -44,6 +44,7 @@ tokio-util = "0.7"
 tracing = "0.1"
 
 oxim-astm = { path = "crates/oxim-astm" }
+oxim-cda = { path = "crates/oxim-cda" }
 oxim-connectors = { path = "crates/oxim-connectors" }
 oxim-core = { path = "crates/oxim-core" }
 oxim-fhir = { path = "crates/oxim-fhir" }
@@ -53,9 +54,11 @@ oxim-lab = { path = "crates/oxim-lab" }
 oxim-mapping = { path = "crates/oxim-mapping" }
 oxim-mllp = { path = "crates/oxim-mllp" }
 oxim-model = { path = "crates/oxim-model" }
+oxim-ncpdp = { path = "crates/oxim-ncpdp" }
 oxim-poct1a = { path = "crates/oxim-poct1a" }
 oxim-store = { path = "crates/oxim-store" }
 oxim-transform = { path = "crates/oxim-transform" }
+oxim-x12 = { path = "crates/oxim-x12" }
 
 proptest = "1.5"
 tempfile = "3"

@@ -19,6 +19,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+oxim-cda.workspace = true
 oxim-connectors.workspace = true
 oxim-core.workspace = true
 oxim-fhir.workspace = true

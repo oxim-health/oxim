@@ -751,6 +751,7 @@ name = "oxim"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "oxim-cda",
  "oxim-connectors",
  "oxim-core",
  "oxim-fhir",
@@ -778,6 +779,20 @@ dependencies = [
  "memchr",
  "proptest",
  "thiserror",
+]
+
+[[package]]
+name = "oxim-cda"
+version = "0.0.0"
+dependencies = [
+ "oxim-core",
+ "oxim-formats",
+ "oxim-mapping",
+ "oxim-model",
+ "oxim-store",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -821,8 +836,10 @@ dependencies = [
  "oxim-formats",
  "oxim-hl7",
  "oxim-model",
+ "oxim-ncpdp",
  "oxim-poct1a",
  "oxim-store",
+ "oxim-x12",
  "serde",
  "serde-saphyr",
  "serde_json",
@@ -926,6 +943,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxim-ncpdp"
+version = "0.0.0"
+dependencies = [
+ "proptest",
+ "thiserror",
+]
+
+[[package]]
 name = "oxim-poct1a"
 version = "0.0.0"
 dependencies = [
@@ -973,6 +998,15 @@ dependencies = [
  "regex",
  "serde_json",
  "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "oxim-x12"
+version = "0.0.0"
+dependencies = [
+ "memchr",
+ "proptest",
  "thiserror",
 ]
 
