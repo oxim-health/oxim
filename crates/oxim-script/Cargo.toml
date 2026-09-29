@@ -1,0 +1,30 @@
+[package]
+name = "oxim-script"
+description = "JavaScript filters, transformers and encoders for OXIM channels, in an embedded QuickJS sandbox"
+keywords = ["healthcare", "hl7", "javascript", "quickjs", "integration"]
+categories = ["network-programming"]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+oxim-core.workspace = true
+oxim-hl7.workspace = true
+oxim-model.workspace = true
+rquickjs.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+oxim-store.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

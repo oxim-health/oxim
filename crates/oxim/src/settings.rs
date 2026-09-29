@@ -22,6 +22,9 @@ pub(crate) struct Settings {
     /// Where code tables live; channel steps resolve table paths here.
     #[serde(default = "tables_dir_default")]
     pub(crate) tables_dir: PathBuf,
+    /// Where script files live; `script` steps resolve `file` here.
+    #[serde(default = "scripts_dir_default")]
+    pub(crate) scripts_dir: PathBuf,
     /// Logging.
     #[serde(default)]
     pub(crate) log: LogSettings,
@@ -46,6 +49,10 @@ fn channels_dir_default() -> PathBuf {
 
 fn tables_dir_default() -> PathBuf {
     PathBuf::from("tables")
+}
+
+fn scripts_dir_default() -> PathBuf {
+    PathBuf::from("scripts")
 }
 
 /// Log output.
@@ -208,6 +215,7 @@ impl Default for Settings {
             data_dir: data_dir_default(),
             channels_dir: channels_dir_default(),
             tables_dir: tables_dir_default(),
+            scripts_dir: scripts_dir_default(),
             log: LogSettings::default(),
             engine: EngineSettings::default(),
             retention: RetentionSettings::default(),
@@ -245,6 +253,7 @@ impl Settings {
         resolve(&mut self.data_dir);
         resolve(&mut self.channels_dir);
         resolve(&mut self.tables_dir);
+        resolve(&mut self.scripts_dir);
         if let Some(directory) = &mut self.log.directory {
             resolve(directory);
         }

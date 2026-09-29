@@ -23,6 +23,7 @@ oxim-connectors.workspace = true
 oxim-core.workspace = true
 oxim-fhir.workspace = true
 oxim-lab.workspace = true
+oxim-script.workspace = true
 oxim-mapping.workspace = true
 oxim-model.workspace = true
 oxim-store.workspace = true

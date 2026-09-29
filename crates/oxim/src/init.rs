@@ -18,6 +18,9 @@ channels_dir: channels
 # Code and routing tables referenced by channel steps.
 tables_dir: tables
 
+# JavaScript files referenced by script steps (`file:`).
+scripts_dir: scripts
+
 log:
   level: info          # or e.g. \"info,oxim_connectors=debug\"; OXIM_LOG overrides
   format: text         # text or json
@@ -56,7 +59,7 @@ destinations:
 /// inactive example channel. Existing files are kept unless `force`.
 pub(crate) fn init(directory: &Path, force: bool, out: &mut impl Write) -> CliResult<()> {
     std::fs::create_dir_all(directory)?;
-    for sub in ["data", "channels", "tables"] {
+    for sub in ["data", "channels", "tables", "scripts"] {
         std::fs::create_dir_all(directory.join(sub))?;
     }
     let files = [
