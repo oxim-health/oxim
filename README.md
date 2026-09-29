@@ -30,6 +30,7 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim`](crates/oxim) | The `oxim` program: engine, live channel reload, retention, message tools and OS service |
 | [`crates/oxim-sim`](crates/oxim-sim) | Simulated analyzers (ASTM), LIS systems (MLLP) and POCT devices, with synthetic data and load tests |
 | [`crates/oxim-transform`](crates/oxim-transform) | Declarative filters, mapping operations and code tables |
+| [`crates/oxim-mapping`](crates/oxim-mapping) | Mappings between HL7 v2, ASTM, POCT1-A and the normalized clinical model (normalizers and encoders) |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |
 | [`fuzz`](fuzz) | Fuzz targets (cargo-fuzz) |
