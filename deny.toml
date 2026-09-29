@@ -48,6 +48,10 @@ exceptions = [
     # support (used by oxim-connectors-db). CDLA-Permissive-2.0 is a
     # permissive data license with no copyleft terms.
     { allow = ["CDLA-Permissive-2.0"], crate = "webpki-roots" },
+    # Quoted-printable encoding used by lettre (the SMTP destination of
+    # oxim-connectors-remote). 0BSD is a public-domain-equivalent license
+    # without even an attribution requirement.
+    { allow = ["0BSD"], crate = "quoted_printable" },
 ]
 
 [bans]

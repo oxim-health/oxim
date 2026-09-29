@@ -124,6 +124,83 @@ async fn posts_messages_and_classifies_responses() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn authenticates_with_oauth2_client_credentials() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(server(
+        listener,
+        vec![
+            Some((
+                "200 OK",
+                r#"{"access_token":"token-a","token_type":"Bearer","expires_in":3600}"#,
+            )),
+            Some(("200 OK", "stored")),
+            Some(("200 OK", "stored")),
+            Some(("401 Unauthorized", "")),
+            Some((
+                "200 OK",
+                r#"{"access_token":"token-b","token_type":"bearer"}"#,
+            )),
+            Some(("200 OK", "stored")),
+        ],
+    ));
+    let http = destination(
+        "http",
+        &format!(
+            "      url: 'http://127.0.0.1:{port}/api/results'
+      oauth2:
+        token_url: 'http://127.0.0.1:{port}/token'
+        client_id: lab client
+        client_secret: synthetic/secret
+        scope: results.write"
+        ),
+    );
+    for n in 1..=2 {
+        http.send(&delivery(n, b"{}", DataType::Json))
+            .await
+            .unwrap();
+    }
+    let rejected = http
+        .send(&delivery(3, b"{}", DataType::Json))
+        .await
+        .unwrap_err();
+    assert!(
+        !rejected.permanent && rejected.message.contains("OAuth"),
+        "{rejected:?}"
+    );
+    http.send(&delivery(3, b"{}", DataType::Json))
+        .await
+        .unwrap();
+
+    let received = server.await.unwrap();
+    let heads: Vec<String> = received
+        .iter()
+        .map(|r| r.head.to_ascii_lowercase())
+        .collect();
+    assert!(heads[0].starts_with("post /token "), "{}", heads[0]);
+    // Basic base64("lab+client:synthetic%2Fsecret"): form-encoded first.
+    assert!(
+        heads[0].contains("authorization: basic bgfik2nsawvuddpzew50agv0awmlmkzzzwnyzxq=\r\n"),
+        "{}",
+        heads[0]
+    );
+    assert_eq!(
+        received[0].body,
+        b"grant_type=client_credentials&scope=results.write"
+    );
+    assert!(heads[1].contains("authorization: bearer token-a\r\n"));
+    assert!(
+        heads[2].contains("authorization: bearer token-a\r\n"),
+        "the token is cached"
+    );
+    assert!(
+        heads[4].starts_with("post /token "),
+        "a new token after the 401"
+    );
+    assert!(heads[5].contains("authorization: bearer token-b\r\n"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn connection_errors_are_temporary() {
     let port = common::free_port();
     let http = destination(

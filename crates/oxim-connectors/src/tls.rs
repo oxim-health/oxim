@@ -70,7 +70,8 @@ pub struct ServerTlsSettings {
     pub handshake_timeout: DurationText,
 }
 
-/// TLS settings of a sender.
+/// TLS settings of a sender. The default trusts the operating system's
+/// certificate authorities, like `tls: {}`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClientTlsSettings {
@@ -89,6 +90,18 @@ pub struct ClientTlsSettings {
     /// Name to verify the server certificate against.
     #[serde(default)]
     pub server_name: Option<String>,
+}
+
+impl Default for ClientTlsSettings {
+    fn default() -> Self {
+        Self {
+            ca_file: None,
+            system_roots: true,
+            cert_file: None,
+            key_file: None,
+            server_name: None,
+        }
+    }
 }
 
 fn config_error(message: String) -> EngineError {
