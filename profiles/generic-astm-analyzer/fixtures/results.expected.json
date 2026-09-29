@@ -1,0 +1,340 @@
+[
+  {
+    "kind": "results",
+    "device": {
+      "software_version": "1.0",
+      "name": "OXIM-SIM"
+    },
+    "groups": [
+      {
+        "patient": {
+          "identifiers": [
+            {
+              "value": "PAT000001",
+              "kind": "LR"
+            }
+          ],
+          "name": {
+            "family": "Example",
+            "given": [
+              "Sam"
+            ]
+          },
+          "birth_date": "1980-01-01",
+          "sex": "unknown"
+        },
+        "specimen": {
+          "identifiers": [
+            {
+              "value": "SMP000001"
+            }
+          ],
+          "kind": {
+            "codings": [
+              {
+                "code": "SERUM"
+              }
+            ]
+          }
+        },
+        "order": {
+          "tests": [
+            {
+              "codings": [
+                {
+                  "system": "urn:oxim:astm:local",
+                  "code": "PANEL"
+                },
+                {
+                  "system": "urn:oxim:astm:test-id",
+                  "code": "^^^PANEL"
+                }
+              ]
+            }
+          ],
+          "priority": "routine",
+          "specimen_ids": [
+            "SMP000001"
+          ],
+          "control": "new"
+        },
+        "observations": [
+          {
+            "sequence": 1,
+            "code": {
+              "codings": [
+                {
+                  "system": "urn:oxim:example-lis",
+                  "code": "2020",
+                  "display": "Leukocytes"
+                },
+                {
+                  "system": "urn:oxim:astm:local",
+                  "code": "WBC"
+                },
+                {
+                  "system": "urn:oxim:astm:test-id",
+                  "code": "^^^WBC"
+                }
+              ]
+            },
+            "value": {
+              "type": "quantity",
+              "value": {
+                "value": "5.23",
+                "unit": "10*9/L"
+              }
+            },
+            "reference_range": {
+              "low": "4.00",
+              "high": "10.00",
+              "text": "4.00-10.00"
+            },
+            "interpretation": [
+              {
+                "code": "N"
+              }
+            ],
+            "status": "final",
+            "effective_at": "2026-09-29T11:59:00",
+            "device_id": "OXIM-SIM",
+            "operator": "SIM",
+            "specimen_id": "SMP000001"
+          },
+          {
+            "sequence": 2,
+            "code": {
+              "codings": [
+                {
+                  "system": "urn:oxim:example-lis",
+                  "code": "1530",
+                  "display": "Creatinine"
+                },
+                {
+                  "system": "urn:oxim:astm:local",
+                  "code": "CREA"
+                },
+                {
+                  "system": "urn:oxim:astm:test-id",
+                  "code": "^^^CREA"
+                }
+              ]
+            },
+            "value": {
+              "type": "quantity",
+              "value": {
+                "value": "79",
+                "unit": "umol/L"
+              }
+            },
+            "reference_range": {
+              "low": "45",
+              "high": "110",
+              "text": "45-110"
+            },
+            "interpretation": [
+              {
+                "code": "N"
+              }
+            ],
+            "status": "final",
+            "effective_at": "2026-09-29T11:59:00",
+            "device_id": "OXIM-SIM",
+            "operator": "SIM",
+            "specimen_id": "SMP000001"
+          },
+          {
+            "sequence": 3,
+            "code": {
+              "codings": [
+                {
+                  "system": "urn:oxim:example-lis",
+                  "code": "1540",
+                  "display": "Potassium"
+                },
+                {
+                  "system": "urn:oxim:astm:local",
+                  "code": "K"
+                },
+                {
+                  "system": "urn:oxim:astm:test-id",
+                  "code": "^^^K"
+                }
+              ]
+            },
+            "value": {
+              "type": "quantity",
+              "value": {
+                "value": "4.6",
+                "unit": "mmol/L"
+              }
+            },
+            "reference_range": {
+              "low": "3.5",
+              "high": "5.1",
+              "text": "3.5-5.1"
+            },
+            "interpretation": [
+              {
+                "code": "N"
+              }
+            ],
+            "status": "final",
+            "effective_at": "2026-09-29T11:59:00",
+            "device_id": "OXIM-SIM",
+            "operator": "SIM",
+            "specimen_id": "SMP000001"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "kind": "results",
+    "device": {
+      "software_version": "1.0",
+      "name": "OXIM-SIM"
+    },
+    "groups": [
+      {
+        "patient": {
+          "identifiers": [
+            {
+              "value": "PAT000002",
+              "kind": "LR"
+            }
+          ],
+          "name": {
+            "family": "Synthetic",
+            "given": [
+              "Deniz"
+            ]
+          },
+          "birth_date": "1980-01-01",
+          "sex": "unknown"
+        },
+        "specimen": {
+          "identifiers": [
+            {
+              "value": "SMP000002"
+            }
+          ],
+          "kind": {
+            "codings": [
+              {
+                "code": "SERUM"
+              }
+            ]
+          }
+        },
+        "order": {
+          "tests": [
+            {
+              "codings": [
+                {
+                  "system": "urn:oxim:astm:local",
+                  "code": "PANEL"
+                },
+                {
+                  "system": "urn:oxim:astm:test-id",
+                  "code": "^^^PANEL"
+                }
+              ]
+            }
+          ],
+          "priority": "routine",
+          "specimen_ids": [
+            "SMP000002"
+          ],
+          "control": "new"
+        },
+        "observations": [
+          {
+            "sequence": 1,
+            "code": {
+              "codings": [
+                {
+                  "system": "urn:oxim:example-lis",
+                  "code": "1520",
+                  "display": "Glucose"
+                },
+                {
+                  "system": "urn:oxim:astm:local",
+                  "code": "GLU"
+                },
+                {
+                  "system": "urn:oxim:astm:test-id",
+                  "code": "^^^GLU"
+                }
+              ]
+            },
+            "value": {
+              "type": "quantity",
+              "value": {
+                "value": "6.1",
+                "unit": "mmol/L"
+              }
+            },
+            "reference_range": {
+              "low": "3.9",
+              "high": "6.1",
+              "text": "3.9-6.1"
+            },
+            "interpretation": [
+              {
+                "code": "H"
+              }
+            ],
+            "status": "final",
+            "effective_at": "2026-09-29T11:59:00",
+            "device_id": "OXIM-SIM",
+            "operator": "SIM",
+            "specimen_id": "SMP000002"
+          },
+          {
+            "sequence": 2,
+            "code": {
+              "codings": [
+                {
+                  "system": "urn:oxim:example-lis",
+                  "code": "2010",
+                  "display": "Hemoglobin"
+                },
+                {
+                  "system": "urn:oxim:astm:local",
+                  "code": "HGB"
+                },
+                {
+                  "system": "urn:oxim:astm:test-id",
+                  "code": "^^^HGB"
+                }
+              ]
+            },
+            "value": {
+              "type": "quantity",
+              "value": {
+                "value": "15.2",
+                "unit": "g/dL"
+              }
+            },
+            "reference_range": {
+              "low": "12.0",
+              "high": "17.0",
+              "text": "12.0-17.0"
+            },
+            "interpretation": [
+              {
+                "code": "N"
+              }
+            ],
+            "status": "final",
+            "effective_at": "2026-09-29T11:59:00",
+            "device_id": "OXIM-SIM",
+            "operator": "SIM",
+            "specimen_id": "SMP000002"
+          }
+        ]
+      }
+    ]
+  }
+]

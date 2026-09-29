@@ -1,0 +1,54 @@
+# A generic point-of-care device that follows CLSI POCT1-A (POCT01) over
+# TCP: hello, status, observations, end of topic and terminate. Use it as
+# the starting point for a real model's profile.
+profile_version: 1
+id: generic-poct1a-device
+vendor: Generic
+model: POCT1-A device
+description: >
+  Connects to OXIM as its data manager, identifies itself (HEL), reports
+  its status (DST) and uploads patient observations (OBS). All data in the
+  fixtures is synthetic.
+connection:
+  transport: tcp
+  protocol: poct1a
+  device_role: client
+  dialect:
+    connection_profile: SA
+    topics: OBS
+channel:
+  source:
+    type: poct1a
+    data_type: poct1a
+    normalize: true
+    settings:
+      listen: 0.0.0.0:7000
+  transformers:
+    - {type: track-device, device: generic-poct, silence_after: 24h}
+    - {type: map-observations, table: tables/device-to-lis.csv, on_missing: keep}
+mappings:
+  - table: tables/device-to-lis.csv
+    direction: device-to-lis
+    description: Device observation identifiers to example LIS codes.
+setup:
+  - title: Network
+    text: >
+      In the device's (or its docking station's) network settings, set the
+      data manager address to the OXIM server and port 7000.
+  - title: Upload
+    text: >
+      Dock the device or start an upload from its menu; it connects, sends
+      its stored observations and disconnects.
+verification:
+  level: simulated
+  evidence:
+    - note: Passes the fixture below, recorded from the oxim-sim POCT1-A device through oxim-capture.
+      source: oxim-sim
+fixtures:
+  - name: upload-two-observations
+    description: A complete conversation uploading two blood gas pH observations.
+    capture: fixtures/upload.oximcap
+    expect:
+      messages: 2
+      status: completed
+      normalized: fixtures/upload.expected.json

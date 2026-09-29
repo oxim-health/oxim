@@ -1,0 +1,71 @@
+# A generic analyzer that follows IHE Laboratory Analytical Workflow (LAW):
+# HL7 v2.5.1 over MLLP, results as OUL^R22 and work order queries as
+# QBP^Q11. Use it as the starting point for a real model's profile.
+profile_version: 1
+id: generic-ihe-law-analyzer
+vendor: Generic
+model: IHE LAW analyzer
+description: >
+  Sends specimen-centric results (OUL^R22) and asks for work orders with
+  QBP^Q11, which OXIM answers with RSP^K11. All data in the fixtures is
+  synthetic.
+connection:
+  transport: tcp
+  protocol: hl7v2-mllp
+  device_role: client
+  dialect:
+    hl7_version: 2.5.1
+    results: OUL^R22
+    query: QBP^Q11 (LAB-27)
+    acknowledgment: original mode
+channel:
+  source:
+    type: mllp
+    data_type: hl7v2
+    normalize: true
+    response:
+      mode: pipeline
+      encoder: {type: hl7v2-rsp-k11}
+    settings:
+      listen: 0.0.0.0:2575
+  transformers:
+    - {type: track-device, device: generic-law, silence_after: 1h}
+    - {type: map-observations, table: tables/device-to-lis.csv, on_missing: keep}
+    - {type: answer-query, device: generic-law}
+mappings:
+  - table: tables/device-to-lis.csv
+    direction: device-to-lis
+    description: Analyzer test codes to example LIS codes.
+quirks: []
+setup:
+  - title: Network
+    text: >
+      Configure the LIS connection as HL7 v2.5.1 over MLLP, the analyzer as
+      the TCP client, the OXIM server's address as host and port 2575.
+  - title: Work order query
+    text: >
+      Enable the IHE LAW work order query (LAB-27) so the analyzer sends
+      QBP^Q11 for each specimen it identifies. OXIM answers with RSP^K11;
+      the work order itself follows as OML^O33 through a destination to the
+      analyzer (see oxim-lab).
+verification:
+  level: simulated
+  evidence:
+    - note: Passes the fixtures below, recorded from oxim-sim through oxim-capture.
+      source: oxim-sim
+fixtures:
+  - name: specimen-results
+    description: The analyzer sends results for two specimens in one OUL^R22.
+    capture: fixtures/results.oximcap
+    expect:
+      messages: 1
+      status: completed
+      normalized: fixtures/results.expected.json
+      replies_contain: ["MSA|AA|LAW000001"]
+  - name: work-order-query-unknown-specimen
+    description: A work order query for an unknown specimen is answered NF.
+    messages: [fixtures/query.hl7]
+    expect:
+      messages: 1
+      status: completed
+      replies_contain: ["RSP^K11", "MSA|AA|Q000001", "|NF|"]
