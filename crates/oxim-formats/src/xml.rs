@@ -482,6 +482,173 @@ impl XmlDocument {
     }
 }
 
+impl XmlDocument {
+    /// The root element.
+    pub fn root(&self) -> XmlElement<'_> {
+        XmlElement {
+            document: self,
+            id: self.root,
+        }
+    }
+
+    /// The element at `path`, or `None` when it is absent. An attribute
+    /// step at the end of the path is not allowed.
+    pub fn element_at(&self, path: &str) -> Result<Option<XmlElement<'_>>, XmlError> {
+        let path: XmlPath = path.parse()?;
+        if matches!(path.target, Target::Attribute(_)) {
+            return Err(XmlError::Path(path.text));
+        }
+        Ok(self
+            .resolve(&path)
+            .map(|id| XmlElement { document: self, id }))
+    }
+}
+
+/// A read-only view of one element, for walking a document without
+/// building paths.
+///
+/// Names follow the path rules: an unprefixed name matches the local name
+/// whatever the prefix, a prefixed name must match exactly, and namespace
+/// URIs are not resolved.
+#[derive(Clone, Copy)]
+pub struct XmlElement<'a> {
+    document: &'a XmlDocument,
+    id: usize,
+}
+
+impl fmt::Debug for XmlElement<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("XmlElement")
+            .field("name", &self.name())
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'a> XmlElement<'a> {
+    fn data(&self) -> Option<&'a Element> {
+        self.document.element(self.id)
+    }
+
+    /// The qualified name as written, for example `cda:section`.
+    pub fn name(&self) -> String {
+        self.data()
+            .map(|e| decode(&e.name, self.document.encoding))
+            .unwrap_or_default()
+    }
+
+    /// The name without its prefix.
+    pub fn local_name(&self) -> String {
+        let name = self.name();
+        match name.split_once(':') {
+            Some((_, local)) => local.to_owned(),
+            None => name,
+        }
+    }
+
+    /// Whether the element's name matches `name`.
+    pub fn is(&self, name: &str) -> bool {
+        Name::parse(name).is_some_and(|name| self.document.matches_name(&name, self.id))
+    }
+
+    /// The value of attribute `name` with references resolved, for example
+    /// `code` or `xsi:type`.
+    pub fn attribute(&self, name: &str) -> Option<String> {
+        let name = Name::parse(name).filter(|n| n.local != "*")?;
+        let attribute = self.document.find_attribute(self.id, &name)?;
+        let raw = &attribute.raw[attribute.value.clone()];
+        Some(resolve_references(&normalize_attribute(&decode(
+            raw,
+            self.document.encoding,
+        ))))
+    }
+
+    /// The child elements in document order.
+    pub fn children(&self) -> impl Iterator<Item = XmlElement<'a>> + use<'a> {
+        let document = self.document;
+        self.data()
+            .map(|e| e.children.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .copied()
+            .filter(move |&id| document.element(id).is_some())
+            .map(move |id| XmlElement { document, id })
+    }
+
+    /// The child elements named `name`.
+    pub fn children_named(&self, name: &str) -> impl Iterator<Item = XmlElement<'a>> + use<'a> {
+        let name = Name::parse(name);
+        self.children().filter(move |child| {
+            name.as_ref()
+                .is_some_and(|n| child.document.matches_name(n, child.id))
+        })
+    }
+
+    /// The first child element named `name`.
+    pub fn child(&self, name: &str) -> Option<XmlElement<'a>> {
+        self.children_named(name).next()
+    }
+
+    /// The element's own text: its direct text and CDATA children, with
+    /// references resolved.
+    pub fn text(&self) -> String {
+        self.document.text_of(self.id)
+    }
+
+    /// All text inside the element, including that of descendants, in
+    /// document order.
+    pub fn text_content(&self) -> String {
+        self.text_content_with(|_| false)
+    }
+
+    /// All text inside the element, with a space before and after the text
+    /// of every descendant element whose local name `separates` accepts,
+    /// for example table cells and paragraphs of a narrative.
+    pub fn text_content_with(&self, separates: impl Fn(&str) -> bool) -> String {
+        enum Step {
+            Visit(usize),
+            Space,
+        }
+        let mut text = String::new();
+        let mut stack = vec![Step::Visit(self.id)];
+        while let Some(step) = stack.pop() {
+            let id = match step {
+                Step::Visit(id) => id,
+                Step::Space => {
+                    text.push(' ');
+                    continue;
+                }
+            };
+            match &self.document.nodes[id] {
+                Node::Element(element) => {
+                    let name = decode(&element.name, self.document.encoding);
+                    let local = name.rsplit(':').next().unwrap_or_default();
+                    let spaced = id != self.id && separates(local);
+                    if spaced {
+                        text.push(' ');
+                        stack.push(Step::Space);
+                    }
+                    stack.extend(
+                        element
+                            .children
+                            .iter()
+                            .rev()
+                            .map(|&child| Step::Visit(child)),
+                    );
+                }
+                Node::Text(raw) => {
+                    text.push_str(&resolve_references(&decode(raw, self.document.encoding)));
+                }
+                Node::CData(raw) => {
+                    let inner = raw.get(9..raw.len().saturating_sub(3)).unwrap_or_default();
+                    text.push_str(&decode(inner, self.document.encoding));
+                }
+                Node::Other(_) => {}
+            }
+        }
+        text
+    }
+}
+
 /// A name in a path: `local`, `prefix:local` or the wildcard `*`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Name {
@@ -1105,6 +1272,33 @@ mod tests {
     #[test]
     fn keeps_unmodified_documents_byte_for_byte() {
         assert_eq!(parse(ORDER).to_bytes(), ORDER.as_bytes());
+    }
+
+    #[test]
+    fn walks_elements() {
+        let doc = parse(ORDER);
+        let root = doc.root();
+        assert_eq!(
+            (root.name(), root.local_name()),
+            ("ns:order".into(), "order".into())
+        );
+        assert!(root.is("order") && root.is("ns:order") && !root.is("x:order"));
+        assert_eq!(root.attribute("id").as_deref(), Some("A&1"));
+        assert_eq!(root.children().count(), 3);
+        let tests: Vec<_> = root.children_named("test").collect();
+        assert_eq!(tests.len(), 2);
+        assert_eq!(tests[1].attribute("priority").as_deref(), Some("stat"));
+        assert_eq!(tests[1].text(), "Hemoglobin <b>");
+        assert!(root.child("missing").is_none());
+        assert_eq!(
+            root.text_content().split_whitespace().collect::<Vec<_>>(),
+            ["Glucose", "Hemoglobin", "<b>"]
+        );
+        let second = doc.element_at("/order/test[2]").unwrap().unwrap();
+        assert_eq!(second.attribute("code").as_deref(), Some("HGB"));
+        assert!(doc.element_at("/order/test[3]").unwrap().is_none());
+        assert!(doc.element_at("/order/test/@code").is_err());
+        assert!(root.children_named("bad name").next().is_none());
     }
 
     #[test]

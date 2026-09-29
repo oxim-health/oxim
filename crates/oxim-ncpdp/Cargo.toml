@@ -1,0 +1,23 @@
+[package]
+name = "oxim-ncpdp"
+description = "Lossless NCPDP Telecommunication Standard transmissions: parsing, editing and responses"
+keywords = ["ncpdp", "pharmacy", "healthcare", "parser", "claims"]
+categories = ["parser-implementations", "encoding"]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

@@ -49,7 +49,7 @@ pub use fixed_width::{
 };
 pub use json::{JsonDocument, JsonError, JsonOptions, JsonPath};
 pub use text::LineEnding;
-pub use xml::{XmlDocument, XmlError, XmlOptions, XmlPath};
+pub use xml::{XmlDocument, XmlElement, XmlError, XmlOptions, XmlPath};
 
 /// Re-exported so callers can name encodings and JSON values without adding
 /// the dependencies themselves.

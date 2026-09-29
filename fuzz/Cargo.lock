@@ -171,7 +171,9 @@ dependencies = [
  "oxim-formats",
  "oxim-hl7",
  "oxim-mllp",
+ "oxim-ncpdp",
  "oxim-poct1a",
+ "oxim-x12",
 ]
 
 [[package]]
@@ -192,12 +194,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxim-ncpdp"
+version = "0.0.0"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "oxim-poct1a"
 version = "0.0.0"
 dependencies = [
  "encoding_rs",
  "memchr",
  "quick-xml",
+ "thiserror",
+]
+
+[[package]]
+name = "oxim-x12"
+version = "0.0.0"
+dependencies = [
+ "memchr",
  "thiserror",
 ]
 

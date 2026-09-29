@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic laboratory report: no real patient data. -->
+<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <realmCode code="US"/>
+  <typeId root="2.16.840.1.113883.1.3" extension="POCD_HD000040"/>
+  <templateId root="1.3.6.1.4.1.19376.1.3.3"/>
+  <id root="2.999.7.1" extension="DOC-0001"/>
+  <code code="11502-2" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="Laboratory report"/>
+  <title>Synthetic Laboratory Report</title>
+  <effectiveTime value="20260929143000+0300"/>
+  <confidentialityCode code="N" codeSystem="2.16.840.1.113883.5.25"/>
+  <languageCode code="en-US"/>
+  <recordTarget>
+    <patientRole>
+      <id root="2.999.7.2" extension="SYN-PAT-42" assigningAuthorityName="Synthetic Hospital"/>
+      <patient>
+        <name><given>Jane</given><given>Q</given><family>Doe</family></name>
+        <administrativeGenderCode code="F" codeSystem="2.16.840.1.113883.5.1"/>
+        <birthTime value="19800101"/>
+      </patient>
+    </patientRole>
+  </recordTarget>
+  <author>
+    <time value="20260929142900+0300"/>
+    <assignedAuthor>
+      <id root="2.999.7.3" extension="ANALYZER-1"/>
+      <assignedAuthoringDevice>
+        <manufacturerModelName>Synthetic Analyzer 3000</manufacturerModelName>
+        <softwareName>SynthLab</softwareName>
+      </assignedAuthoringDevice>
+    </assignedAuthor>
+  </author>
+  <custodian>
+    <assignedCustodian>
+      <representedCustodianOrganization>
+        <id root="2.999.7.4"/>
+        <name>Synthetic Laboratory</name>
+      </representedCustodianOrganization>
+    </assignedCustodian>
+  </custodian>
+  <component>
+    <structuredBody>
+      <component>
+        <section>
+          <code code="18719-5" codeSystem="2.16.840.1.113883.6.1" displayName="Chemistry studies"/>
+          <title>Chemistry</title>
+          <text>
+            <table>
+              <tr><td>Glucose</td><td>5.40 mmol/L</td></tr>
+              <tr><td>Hemoglobin</td><td>&lt;0.5 g/dL</td></tr>
+            </table>
+          </text>
+          <entry typeCode="DRIV">
+            <act classCode="ACT" moodCode="EVN">
+              <code code="18719-5" codeSystem="2.16.840.1.113883.6.1"/>
+              <statusCode code="completed"/>
+              <entryRelationship typeCode="COMP">
+                <organizer classCode="BATTERY" moodCode="EVN">
+                  <code code="24323-8" codeSystem="2.16.840.1.113883.6.1" displayName="Metabolic panel"/>
+                  <statusCode code="completed"/>
+                  <specimen typeCode="SPC">
+                    <specimenRole classCode="SPEC">
+                      <id root="2.999.7.5" extension="S123"/>
+                      <specimenPlayingEntity><code code="SER" codeSystem="2.16.840.1.113883.5.129" displayName="Serum"/></specimenPlayingEntity>
+                    </specimenRole>
+                  </specimen>
+                  <component>
+                    <observation classCode="OBS" moodCode="EVN">
+                      <code code="2345-7" codeSystem="2.16.840.1.113883.6.1" displayName="Glucose">
+                        <translation code="GLU" codeSystem="2.999.7.6"/>
+                      </code>
+                      <statusCode code="completed"/>
+                      <effectiveTime value="20260929142500+0300"/>
+                      <value xsi:type="PQ" value="5.40" unit="mmol/L"/>
+                      <interpretationCode code="N" codeSystem="2.16.840.1.113883.5.83"/>
+                      <methodCode code="HEXOKINASE" codeSystem="2.999.7.7"/>
+                      <entryRelationship typeCode="SUBJ" inversionInd="true">
+                        <act classCode="ACT" moodCode="EVN">
+                          <code code="48767-8" codeSystem="2.16.840.1.113883.6.1"/>
+                          <text>Slight hemolysis</text>
+                        </act>
+                      </entryRelationship>
+                      <referenceRange>
+                        <observationRange>
+                          <text>3.9-6.1</text>
+                          <value xsi:type="IVL_PQ"><low value="3.9" unit="mmol/L"/><high value="6.1" unit="mmol/L"/></value>
+                        </observationRange>
+                      </referenceRange>
+                    </observation>
+                  </component>
+                  <component>
+                    <observation classCode="OBS" moodCode="EVN">
+                      <code code="718-7" codeSystem="2.16.840.1.113883.6.1" displayName="Hemoglobin"/>
+                      <statusCode code="active"/>
+                      <value xsi:type="IVL_PQ"><high value="0.5" unit="g/dL" inclusive="false"/></value>
+                      <interpretationCode code="L" codeSystem="2.16.840.1.113883.5.83"/>
+                    </observation>
+                  </component>
+                  <component>
+                    <observation classCode="OBS" moodCode="RQO">
+                      <code code="2160-0" codeSystem="2.16.840.1.113883.6.1" displayName="Creatinine"/>
+                    </observation>
+                  </component>
+                </organizer>
+              </entryRelationship>
+            </act>
+          </entry>
+        </section>
+      </component>
+      <component>
+        <section>
+          <code code="18725-2" codeSystem="2.16.840.1.113883.6.1" displayName="Microbiology studies"/>
+          <title>Microbiology</title>
+          <text>Culture negative.</text>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="600-7" codeSystem="2.16.840.1.113883.6.1" displayName="Blood culture"/>
+              <statusCode code="completed"/>
+              <value xsi:type="CD" code="264868006" codeSystem="2.16.840.1.113883.6.96" displayName="No growth"/>
+              <specimen typeCode="SPC"><specimenRole><id extension="S124"/></specimenRole></specimen>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="LOCAL-TITER" codeSystemName="urn:example:local"/>
+              <value xsi:type="RTO_PQ_PQ"><numerator value="1"/><denominator value="64"/></value>
+            </observation>
+          </entry>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</ClinicalDocument>
