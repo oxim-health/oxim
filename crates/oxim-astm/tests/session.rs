@@ -1,6 +1,9 @@
 //! Scenario tests for LIS01 link sessions, including two sessions talking to
 //! each other.
 
+// Test helpers outside `#[test]` functions fail loudly on purpose.
+#![allow(clippy::unwrap_used)]
+
 use std::time::{Duration, Instant};
 
 use oxim_astm::frame::{ACK, ENQ, EOT, Frame, NAK, STX, split_message};
@@ -364,4 +367,137 @@ fn two_sessions_exchange_messages_in_both_directions() {
     assert!(instrument_log.contains(&Output::Received(
         b"H|\\^&\rO|1|SMP002||^^^HGB\rL|1\r".to_vec()
     )));
+}
+
+fn deferring() -> SessionConfig {
+    let mut config = SessionConfig::default();
+    config.defer_final_ack = true;
+    config
+}
+
+/// Feeds ENQ and every frame of `message` except the last, which is
+/// returned.
+fn receive_all_but_last(session: &mut Session, message: &[u8], at: Instant) -> Frame {
+    session.handle_input(&[ENQ], at);
+    assert_eq!(drain(session), [Output::Transmit(vec![ACK])]);
+    let mut frames = split_message(message, 1, 240).unwrap();
+    let last = frames.pop().unwrap();
+    for frame in &frames {
+        session.handle_input(&frame.encode(), at);
+        assert_eq!(drain(session), [Output::Transmit(vec![ACK])]);
+    }
+    last
+}
+
+#[test]
+fn defers_the_final_ack_until_confirmed() {
+    let t0 = Instant::now();
+    let mut session = Session::new(deferring());
+    let last = receive_all_but_last(&mut session, MESSAGE, t0);
+
+    session.handle_input(&last.encode(), t0);
+    assert_eq!(
+        drain(&mut session),
+        [Output::ReceivedPending(MESSAGE.to_vec())]
+    );
+    assert!(session.awaiting_confirmation());
+    assert_eq!(session.poll_timeout(), Some(t0 + secs(10)));
+
+    // The sender waits for our reply; anything it sends stays buffered.
+    session.handle_input(&[EOT], t0);
+    assert!(drain(&mut session).is_empty());
+
+    assert!(session.confirm_received(t0 + Duration::from_millis(5)));
+    assert_eq!(drain(&mut session), [Output::Transmit(vec![ACK])]);
+    assert!(session.is_idle());
+    assert!(!session.confirm_received(t0));
+}
+
+#[test]
+fn rejected_messages_are_received_again() {
+    let t0 = Instant::now();
+    let mut session = Session::new(deferring());
+    let last = receive_all_but_last(&mut session, MESSAGE, t0);
+    session.handle_input(&last.encode(), t0);
+    drain(&mut session);
+
+    assert!(session.reject_received(t0));
+    assert_eq!(drain(&mut session), [Output::Transmit(vec![NAK])]);
+    assert!(!session.awaiting_confirmation());
+
+    // The sender retransmits the refused frame; the whole message is
+    // reported again.
+    session.handle_input(&last.encode(), t0 + secs(1));
+    assert_eq!(
+        drain(&mut session),
+        [Output::ReceivedPending(MESSAGE.to_vec())]
+    );
+    assert!(session.confirm_received(t0 + secs(1)));
+    assert_eq!(drain(&mut session), [Output::Transmit(vec![ACK])]);
+
+    // Our ACK was lost and the sender repeats the frame: acknowledged, not
+    // reported twice.
+    session.handle_input(&last.encode(), t0 + secs(2));
+    let outputs = drain(&mut session);
+    assert_eq!(outputs.last(), Some(&Output::Transmit(vec![ACK])));
+    assert!(
+        !outputs
+            .iter()
+            .any(|o| matches!(o, Output::ReceivedPending(_)))
+    );
+    session.handle_input(&[EOT], t0 + secs(2));
+    assert!(drain(&mut session).is_empty());
+}
+
+#[test]
+fn unconfirmed_messages_are_refused_after_the_timeout() {
+    let t0 = Instant::now();
+    let mut session = Session::new(deferring());
+    let last = receive_all_but_last(&mut session, MESSAGE, t0);
+    session.handle_input(&last.encode(), t0);
+    drain(&mut session);
+
+    session.handle_timeout(t0 + secs(9));
+    assert!(drain(&mut session).is_empty());
+    session.handle_timeout(t0 + secs(10));
+    assert_eq!(
+        drain(&mut session),
+        [
+            Output::Event(Event::ConfirmationTimeout),
+            Output::Transmit(vec![NAK])
+        ]
+    );
+    // A late confirmation changes nothing.
+    assert!(!session.confirm_received(t0 + secs(11)));
+    assert!(drain(&mut session).is_empty());
+}
+
+#[test]
+fn each_terminator_frame_of_a_transmission_is_deferred() {
+    let t0 = Instant::now();
+    let mut session = Session::new(deferring());
+    // Two messages in one transmission: each terminator frame is deferred.
+    let second = b"H|\\^&\rR|1|^^^HGB|13.2|g/dL\rL|1|N\r";
+    let last = receive_all_but_last(&mut session, MESSAGE, t0);
+    session.handle_input(&last.encode(), t0);
+    assert_eq!(
+        drain(&mut session),
+        [Output::ReceivedPending(MESSAGE.to_vec())]
+    );
+    session.confirm_received(t0);
+    drain(&mut session);
+
+    let frames = split_message(second, (last.number() + 1) % 8, 240).unwrap();
+    for (index, frame) in frames.iter().enumerate() {
+        session.handle_input(&frame.encode(), t0);
+        let outputs = drain(&mut session);
+        if index + 1 == frames.len() {
+            assert_eq!(outputs, [Output::ReceivedPending(second.to_vec())]);
+        } else {
+            assert_eq!(outputs, [Output::Transmit(vec![ACK])]);
+        }
+    }
+    session.confirm_received(t0);
+    session.handle_input(&[EOT], t0);
+    assert_eq!(drain(&mut session), [Output::Transmit(vec![ACK])]);
 }

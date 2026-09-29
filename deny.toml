@@ -26,6 +26,12 @@ confidence-threshold = 0.9
 # The list is policy, not an inventory: licenses may be allowed before any
 # dependency uses them.
 unused-allowed-license = "allow"
+exceptions = [
+    # Serial port support for analyzers on RS-232 lines. MPL-2.0 is a
+    # file-level copyleft; the crate is used unmodified, so OXIM itself stays
+    # MIT OR Apache-2.0. Accepted for this crate only.
+    { allow = ["MPL-2.0"], crate = "serialport" },
+]
 
 [bans]
 multiple-versions = "warn"
