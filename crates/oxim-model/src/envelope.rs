@@ -208,6 +208,61 @@ impl DestinationStatus {
     }
 }
 
+/// Returned when a status name is unknown.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error("unknown status {0:?}")]
+pub struct UnknownStatus(pub String);
+
+macro_rules! status_names {
+    ($type:ty { $($variant:ident => $name:literal),+ $(,)? }) => {
+        impl $type {
+            /// Every status, in declaration order.
+            pub const ALL: &'static [Self] = &[$(Self::$variant),+];
+
+            /// The stored and serialized name.
+            pub fn as_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $name),+
+                }
+            }
+        }
+
+        impl FromStr for $type {
+            type Err = UnknownStatus;
+
+            fn from_str(s: &str) -> Result<Self, UnknownStatus> {
+                match s {
+                    $($name => Ok(Self::$variant),)+
+                    _ => Err(UnknownStatus(s.to_owned())),
+                }
+            }
+        }
+
+        impl fmt::Display for $type {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+    };
+}
+
+status_names!(MessageStatus {
+    Received => "received",
+    Filtered => "filtered",
+    Transformed => "transformed",
+    Completed => "completed",
+    Error => "error",
+});
+
+status_names!(DestinationStatus {
+    Queued => "queued",
+    Sending => "sending",
+    Sent => "sent",
+    Filtered => "filtered",
+    Retrying => "retrying",
+    Failed => "failed",
+});
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,6 +277,24 @@ mod tests {
             );
         }
         assert!("HL7".parse::<DataType>().is_err());
+    }
+
+    #[test]
+    fn status_names_match_serde() {
+        for status in MessageStatus::ALL {
+            let json = serde_json::to_string(status).unwrap();
+            assert_eq!(json, format!("\"{status}\""));
+            assert_eq!(status.as_str().parse::<MessageStatus>().unwrap(), *status);
+        }
+        for status in DestinationStatus::ALL {
+            let json = serde_json::to_string(status).unwrap();
+            assert_eq!(json, format!("\"{status}\""));
+            assert_eq!(
+                status.as_str().parse::<DestinationStatus>().unwrap(),
+                *status
+            );
+        }
+        assert!("sending!".parse::<DestinationStatus>().is_err());
     }
 
     #[test]

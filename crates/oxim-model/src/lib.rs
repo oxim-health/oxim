@@ -25,7 +25,9 @@ pub use clinical::{
     Specimen, SpecimenQuery,
 };
 pub use decimal::{Decimal, InvalidDecimal};
-pub use envelope::{DataType, DestinationStatus, Envelope, MessageStatus, UnknownDataType};
+pub use envelope::{
+    DataType, DestinationStatus, Envelope, MessageStatus, UnknownDataType, UnknownStatus,
+};
 pub use id::{
     ChannelId, ConnectorId, DeviceId, InvalidMessageId, InvalidName, MessageId, MessageIdGenerator,
 };
