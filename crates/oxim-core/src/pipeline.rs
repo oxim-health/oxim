@@ -23,6 +23,10 @@ pub struct MessageContext {
     pub clinical: Option<ClinicalContent>,
     /// Values shared between steps, such as a looked-up code.
     pub variables: BTreeMap<String, String>,
+    /// The reply for the sender, set by a step when the channel answers
+    /// requests (`source.response.mode: pipeline`), for example the orders
+    /// for a device's host query.
+    pub response: Option<Encoded>,
 }
 
 /// Decides whether a message continues.
@@ -168,6 +172,7 @@ impl CompiledPipeline {
             document,
             clinical,
             variables: BTreeMap::new(),
+            response: None,
         };
 
         let mut contents = Vec::new();
@@ -181,6 +186,13 @@ impl CompiledPipeline {
             });
         }
         run_transformers(&self.transformers, &mut context, "")?;
+        if let Some(reply) = &context.response {
+            contents.push(Content::new(
+                Stage::Reply,
+                Some(reply.data_type),
+                reply.data.clone(),
+            ));
+        }
 
         if let Some(clinical) = &context.clinical {
             let json = serde_json::to_vec(clinical)

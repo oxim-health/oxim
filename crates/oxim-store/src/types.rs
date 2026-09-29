@@ -19,6 +19,9 @@ pub enum Stage {
     Encoded,
     /// The response a destination returned, such as an HL7 ACK.
     Response,
+    /// The reply returned to the source, such as an answer to a device's
+    /// host query.
+    Reply,
 }
 
 impl Stage {
@@ -30,6 +33,7 @@ impl Stage {
             Self::Transformed => "transformed",
             Self::Encoded => "encoded",
             Self::Response => "response",
+            Self::Reply => "reply",
         }
     }
 
@@ -49,6 +53,7 @@ impl FromStr for Stage {
             "transformed" => Self::Transformed,
             "encoded" => Self::Encoded,
             "response" => Self::Response,
+            "reply" => Self::Reply,
             _ => return Err(()),
         })
     }

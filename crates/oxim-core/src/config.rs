@@ -97,9 +97,44 @@ pub struct SourceConfig {
     /// Whether to map messages to the normalized clinical model.
     #[serde(default)]
     pub normalize: bool,
+    /// Whether and how the source answers the sender with a reply, for
+    /// example to answer a device's host query. Without it, sources only
+    /// acknowledge receipt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response: Option<ResponseConfig>,
     /// Connector-specific settings.
     #[serde(default, skip_serializing_if = "Settings::is_empty")]
     pub settings: Settings,
+}
+
+/// Where a source's reply comes from.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResponseConfig {
+    /// The origin of the reply.
+    pub mode: ResponseMode,
+    /// The destination whose response is relayed, for `mode: destination`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub destination: Option<ConnectorId>,
+    /// How long the sender may wait for the reply.
+    #[serde(default = "response_timeout_default")]
+    pub timeout: DurationText,
+}
+
+fn response_timeout_default() -> DurationText {
+    DurationText(Duration::from_secs(10))
+}
+
+/// The origin of a source's reply.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponseMode {
+    /// A pipeline step produces the reply, for example from the order
+    /// cache.
+    Pipeline,
+    /// The message is delivered to one destination and that destination's
+    /// response (for example the LIS's answer) is relayed to the sender.
+    Destination,
 }
 
 /// One destination of a channel.
@@ -393,6 +428,31 @@ impl ChannelConfig {
 
     /// Checks rules that the YAML structure cannot express.
     pub fn validate(&self) -> Result<(), EngineError> {
+        if let Some(response) = &self.source.response {
+            match (response.mode, &response.destination) {
+                (ResponseMode::Destination, None) => {
+                    return Err(EngineError::Config(format!(
+                        "channel {}: response mode `destination` needs a `destination`",
+                        self.id
+                    )));
+                }
+                (ResponseMode::Destination, Some(target))
+                    if !self.destinations.iter().any(|d| d.id == *target) =>
+                {
+                    return Err(EngineError::Config(format!(
+                        "channel {}: response destination {target} is not a destination of the channel",
+                        self.id
+                    )));
+                }
+                (ResponseMode::Pipeline, Some(_)) => {
+                    return Err(EngineError::Config(format!(
+                        "channel {}: response mode `pipeline` takes no `destination`",
+                        self.id
+                    )));
+                }
+                _ => {}
+            }
+        }
         let mut ids = BTreeSet::from([self.source.id.clone()]);
         for destination in &self.destinations {
             if !ids.insert(destination.id.clone()) {
