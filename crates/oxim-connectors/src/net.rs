@@ -8,10 +8,13 @@ use std::time::Duration;
 use oxim_core::{ConnectorError, EngineError, Settings, SourceContext};
 use oxim_model::{ClinicalDateTime, Timestamp};
 use serde::de::DeserializeOwned;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
+use tokio_rustls::TlsAcceptor;
 use tracing::{debug, warn};
+
+use crate::tls::{ServerTlsSettings, Stream, acceptor};
 
 /// The default bound for one message: 16 MiB.
 pub(crate) const DEFAULT_MAX_MESSAGE: usize = 16 * 1024 * 1024;
@@ -99,19 +102,53 @@ pub(crate) fn parse_bytes(text: &str) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+/// TLS of a listener: the acceptor and the handshake limit.
+#[derive(Clone)]
+pub(crate) struct ListenerTls {
+    acceptor: TlsAcceptor,
+    handshake_timeout: Duration,
+}
+
+impl std::fmt::Debug for ListenerTls {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ListenerTls")
+            .field("handshake_timeout", &self.handshake_timeout)
+            .finish_non_exhaustive()
+    }
+}
+
+impl ListenerTls {
+    /// Reads the certificate files of a `tls` block, if any.
+    pub(crate) fn from_settings(
+        settings: Option<&ServerTlsSettings>,
+    ) -> Result<Option<Self>, oxim_core::EngineError> {
+        settings
+            .map(|settings| {
+                Ok(Self {
+                    acceptor: acceptor(settings)?,
+                    handshake_timeout: settings.handshake_timeout.0,
+                })
+            })
+            .transpose()
+    }
+}
+
 /// Accepts TCP connections on `listen` until the channel stops, running
-/// `handle` for each one. Connections beyond `max_connections` are closed
-/// immediately.
+/// `handle` for each one after the TLS handshake when `tls` is set.
+/// Connections beyond `max_connections` are closed immediately; handshakes
+/// run in the connection tasks, so a slow client cannot stall the others.
 pub(crate) async fn serve<F, Fut>(
     context: &SourceContext,
     listen: &str,
     max_connections: usize,
+    tls: Option<ListenerTls>,
     handle: F,
 ) -> Result<(), ConnectorError>
 where
-    F: Fn(TcpStream, SocketAddr) -> Fut,
+    F: Fn(Stream, SocketAddr) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
+    let handle = Arc::new(handle);
     let listener = TcpListener::bind(listen)
         .await
         .map_err(|e| ConnectorError(format!("cannot listen on {listen}: {e}")))?;
@@ -134,9 +171,27 @@ where
                     continue;
                 };
                 let _ = stream.set_nodelay(true);
-                let connection = handle(stream, peer);
+                let handle = handle.clone();
+                let tls = tls.clone();
+                let channel = context.channel().clone();
                 connections.spawn(async move {
-                    connection.await;
+                    let stream = match tls {
+                        None => Stream::Plain(stream),
+                        Some(tls) => {
+                            match tokio::time::timeout(tls.handshake_timeout, tls.acceptor.accept(stream)).await {
+                                Ok(Ok(stream)) => Stream::Server(Box::new(stream)),
+                                Ok(Err(e)) => {
+                                    debug!(%channel, %peer, error = %e, "TLS handshake failed");
+                                    return;
+                                }
+                                Err(_) => {
+                                    debug!(%channel, %peer, "TLS handshake timed out");
+                                    return;
+                                }
+                            }
+                        }
+                    };
+                    handle(stream, peer).await;
                     drop(permit);
                 });
             }

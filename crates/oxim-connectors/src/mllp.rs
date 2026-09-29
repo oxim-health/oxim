@@ -9,6 +9,7 @@
 //! | `max_connections` | `100` | Concurrent connections; more are closed |
 //! | `max_frame_len` | 16 MiB | Largest accepted message |
 //! | `require_trailing_cr` | `false` | Reject frames whose end block is not followed by CR |
+//! | `tls` | none | TLS listener settings (certificate, key, optional client CA for mutual TLS); see [`tls`](crate::tls) |
 //!
 //! Every frame is stored before it is acknowledged. In original mode the
 //! sender gets `AA` once the message is durable, or `AE` when it could not
@@ -26,6 +27,7 @@
 //! | `ack_timeout` | `30s` | Time to wait for the acknowledgment |
 //! | `ack` | `required` | `required`, or `none` for receivers that never acknowledge |
 //! | `max_frame_len` | 16 MiB | Largest accepted acknowledgment |
+//! | `tls` | none | TLS sender settings (`tls: {}` for defaults; CA, client certificate for mutual TLS); see [`tls`](crate::tls) |
 //!
 //! The connection is kept open between messages and re-established after
 //! errors. `AA`/`CA` completes the delivery (the acknowledgment is stored as
@@ -52,11 +54,11 @@ use oxim_model::{MessageId, Timestamp};
 use oxim_store::Delivery;
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
 
-use crate::net::{DEFAULT_MAX_MESSAGE, hl7_timestamp, serve, settings};
+use crate::net::{DEFAULT_MAX_MESSAGE, ListenerTls, hl7_timestamp, serve, settings};
+use crate::tls::{ClientTlsSettings, Dialer, ServerTlsSettings, Stream};
 
 const READ_BUFFER: usize = 64 * 1024;
 
@@ -91,20 +93,26 @@ pub struct MllpSourceSettings {
     /// Whether an end block must be followed by a carriage return.
     #[serde(default)]
     pub require_trailing_cr: bool,
+    /// TLS, optionally with client certificates (mutual TLS).
+    #[serde(default)]
+    pub tls: Option<ServerTlsSettings>,
 }
 
 /// Listens for HL7 v2 messages over MLLP.
 #[derive(Debug, Clone)]
 pub struct MllpSource {
     settings: Arc<MllpSourceSettings>,
+    tls: Option<ListenerTls>,
 }
 
 impl MllpSource {
-    /// Creates the source from its settings.
-    pub fn new(settings: MllpSourceSettings) -> Self {
-        Self {
+    /// Creates the source from its settings, reading the TLS files.
+    pub fn new(settings: MllpSourceSettings) -> Result<Self, EngineError> {
+        let tls = ListenerTls::from_settings(settings.tls.as_ref())?;
+        Ok(Self {
             settings: Arc::new(settings),
-        }
+            tls,
+        })
     }
 
     fn decoder_options(&self) -> DecoderOptions {
@@ -124,6 +132,7 @@ impl SourceConnector for MllpSource {
             &context,
             &self.settings.listen,
             self.settings.max_connections,
+            self.tls.clone(),
             move |stream, peer| connection(handler_context.clone(), options, stream, peer),
         )
         .await
@@ -133,7 +142,7 @@ impl SourceConnector for MllpSource {
 async fn connection(
     context: SourceContext,
     options: DecoderOptions,
-    mut stream: TcpStream,
+    mut stream: Stream,
     peer: SocketAddr,
 ) {
     let mut decoder = Decoder::new(options);
@@ -167,7 +176,7 @@ async fn connection(
 /// Handles one decoder event; returns `false` when the connection is lost.
 async fn handle_event(
     context: &SourceContext,
-    stream: &mut TcpStream,
+    stream: &mut Stream,
     peer: SocketAddr,
     event: Event,
 ) -> bool {
@@ -351,10 +360,13 @@ pub struct MllpDestinationSettings {
     /// Largest accepted acknowledgment.
     #[serde(default = "default_max_frame_len")]
     pub max_frame_len: usize,
+    /// TLS, optionally with a client certificate (mutual TLS).
+    #[serde(default)]
+    pub tls: Option<ClientTlsSettings>,
 }
 
 struct Connection {
-    stream: TcpStream,
+    stream: Stream,
     decoder: Decoder,
 }
 
@@ -362,13 +374,15 @@ struct Connection {
 #[derive(Debug)]
 pub struct MllpDestination {
     settings: MllpDestinationSettings,
+    dialer: Dialer,
     connection: Mutex<Option<Connection>>,
 }
 
 impl std::fmt::Debug for Connection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Connection")
-            .field("peer", &self.stream.peer_addr().ok())
+            .field("peer", &self.stream.tcp().peer_addr().ok())
+            .field("tls", &self.stream.is_tls())
             .finish_non_exhaustive()
     }
 }
@@ -393,30 +407,26 @@ impl Failure {
 }
 
 impl MllpDestination {
-    /// Creates the destination from its settings.
-    pub fn new(settings: MllpDestinationSettings) -> Self {
-        Self {
+    /// Creates the destination from its settings, reading the TLS files.
+    pub fn new(settings: MllpDestinationSettings) -> Result<Self, EngineError> {
+        let dialer = Dialer::new(
+            &settings.target,
+            settings.connect_timeout.0,
+            settings.tls.as_ref(),
+        )?;
+        Ok(Self {
             settings,
+            dialer,
             connection: Mutex::new(None),
-        }
+        })
     }
 
     async fn connect(&self) -> Result<Connection, Failure> {
-        let target = &self.settings.target;
-        let stream =
-            tokio::time::timeout(self.settings.connect_timeout.0, TcpStream::connect(target))
-                .await
-                .map_err(|_| {
-                    Failure::reset(SendError::temporary(format!(
-                        "connecting to {target} timed out"
-                    )))
-                })?
-                .map_err(|e| {
-                    Failure::reset(SendError::temporary(format!(
-                        "cannot connect to {target}: {e}"
-                    )))
-                })?;
-        let _ = stream.set_nodelay(true);
+        let stream = self
+            .dialer
+            .connect()
+            .await
+            .map_err(|e| Failure::reset(SendError::temporary(e)))?;
         let mut options = DecoderOptions::default();
         options.max_frame_len = self.settings.max_frame_len;
         Ok(Connection {
@@ -556,7 +566,7 @@ pub fn register(registry: &mut Registry) {
     registry
         .add_source("mllp", |config: &SourceConfig| {
             let settings: MllpSourceSettings = settings(&config.settings, "mllp source")?;
-            Ok(Arc::new(MllpSource::new(settings)) as Arc<dyn SourceConnector>)
+            Ok(Arc::new(MllpSource::new(settings)?) as Arc<dyn SourceConnector>)
         })
         .add_destination("mllp", |config: &DestinationConfig| {
             let settings: MllpDestinationSettings = settings(&config.settings, "mllp destination")?;
@@ -565,7 +575,7 @@ pub fn register(registry: &mut Registry) {
                     "mllp destination needs a target".into(),
                 ));
             }
-            Ok(Arc::new(MllpDestination::new(settings)) as Arc<dyn DestinationConnector>)
+            Ok(Arc::new(MllpDestination::new(settings)?) as Arc<dyn DestinationConnector>)
         });
 }
 

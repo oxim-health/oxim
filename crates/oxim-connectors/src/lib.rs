@@ -15,6 +15,9 @@
 //! | `astm-serial` | ASTM LIS01 over RS-232 | ASTM LIS01 over RS-232 | [`astm`] |
 //! | `astm-raw-tcp` | ASTM records without LIS01 framing | | [`astm`] |
 //! | `poct1a` | POCT1-A device conversations | | [`poct1a`] |
+//!
+//! `mllp` and `tcp` support TLS and mutual TLS through a `tls` settings
+//! block; see [`tls`].
 
 pub mod astm;
 pub mod file;
@@ -24,6 +27,7 @@ mod net;
 pub mod poct1a;
 pub mod serial;
 pub mod tcp;
+pub mod tls;
 
 /// Registers every connector of this crate.
 pub fn register(registry: &mut oxim_core::Registry) {
