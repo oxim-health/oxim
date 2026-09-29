@@ -89,7 +89,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [hl7_message, hl7_edit, mllp_decoder, astm_frames, astm_message]
+        target:
+          [hl7_message, hl7_edit, mllp_decoder, astm_frames, astm_message, formats_json, formats_xml, formats_delimited]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
