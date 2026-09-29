@@ -40,7 +40,9 @@ pub use config::{
     ChannelConfig, DestinationConfig, ResponseConfig, ResponseMode, Settings, SourceConfig,
     StepConfig,
 };
-pub use connector::{DestinationConnector, Reply, SourceConnector, SourceContext, SubmitInfo};
+pub use connector::{
+    DestinationConnector, PendingReply, Reply, SourceConnector, SourceContext, SubmitInfo,
+};
 pub use document::{Document, DocumentParser};
 pub use engine::{Engine, EngineOptions};
 pub use error::{ConnectorError, EngineError, SendError, StepError};

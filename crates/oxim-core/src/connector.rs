@@ -260,29 +260,103 @@ impl SourceContext {
     /// was produced in time (see [`Reply::error`]); the sender should then
     /// get the protocol's plain acknowledgment.
     pub async fn request(&self, raw: Vec<u8>, info: SubmitInfo) -> Result<Reply, EngineError> {
-        let shared = &self.shared;
+        Ok(self.begin_request(raw, info).await?.reply().await)
+    }
+
+    /// The first half of [`SourceContext::request`]: stores the message
+    /// durably and returns a handle to await the reply. Protocols that must
+    /// acknowledge receipt quickly (ASTM LIS01 answers every frame within
+    /// 15 seconds) acknowledge between the two halves.
+    pub async fn begin_request(
+        &self,
+        raw: Vec<u8>,
+        info: SubmitInfo,
+    ) -> Result<PendingReply, EngineError> {
+        let shared = self.shared.clone();
         let Some(config) = shared.response.clone() else {
             let message_id = self.submit(raw, info).await?;
-            return Ok(Reply {
-                message_id,
-                status: MessageStatus::Received,
-                data: None,
-                data_type: None,
-                error: Some("the channel does not produce replies".into()),
+            return Ok(PendingReply {
+                shared,
+                work: Pending::Submitted(message_id),
             });
         };
         let envelope = self.envelope(raw, info)?;
-        let id = envelope.id;
         shared.store.receive(envelope.clone()).await?;
         // Register before processing so a fast delivery cannot be missed.
         let watch = match (config.mode, &config.destination) {
             (ResponseMode::Destination, Some(destination)) => Some((
                 destination.clone(),
-                shared.watches.watch(id, destination.clone()),
+                shared.watches.watch(envelope.id, destination.clone()),
             )),
             _ => None,
         };
-        let processed = crate::engine::process_and_record(shared, envelope).await;
+        Ok(PendingReply {
+            shared,
+            work: Pending::Process {
+                envelope,
+                config,
+                watch,
+            },
+        })
+    }
+}
+
+enum Pending {
+    /// The channel does not reply; the message went the normal way.
+    Submitted(MessageId),
+    /// The message is stored and waits for processing and its reply.
+    Process {
+        envelope: Envelope,
+        config: ResponseConfig,
+        watch: Option<(ConnectorId, oneshot::Receiver<DeliveryReport>)>,
+    },
+}
+
+/// A stored message whose reply is not produced yet; see
+/// [`SourceContext::begin_request`].
+pub struct PendingReply {
+    shared: Arc<ChannelShared>,
+    work: Pending,
+}
+
+impl fmt::Debug for PendingReply {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PendingReply")
+            .field("message_id", &self.message_id())
+            .finish_non_exhaustive()
+    }
+}
+
+impl PendingReply {
+    /// The stored message.
+    pub fn message_id(&self) -> MessageId {
+        match &self.work {
+            Pending::Submitted(id) => *id,
+            Pending::Process { envelope, .. } => envelope.id,
+        }
+    }
+
+    /// Processes the message and waits for its reply.
+    pub async fn reply(self) -> Reply {
+        let shared = self.shared;
+        let (envelope, config, watch) = match self.work {
+            Pending::Submitted(message_id) => {
+                return Reply {
+                    message_id,
+                    status: MessageStatus::Received,
+                    data: None,
+                    data_type: None,
+                    error: Some("the channel does not produce replies".into()),
+                };
+            }
+            Pending::Process {
+                envelope,
+                config,
+                watch,
+            } => (envelope, config, watch),
+        };
+        let id = envelope.id;
+        let processed = crate::engine::process_and_record(&shared, envelope).await;
         // Mirror the store: a transformed message without queued
         // destinations is complete.
         let status = match processed.status {
@@ -341,6 +415,6 @@ impl SourceContext {
                 }
             }
         }
-        Ok(reply)
+        reply
     }
 }

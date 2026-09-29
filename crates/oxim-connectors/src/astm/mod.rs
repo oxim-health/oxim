@@ -29,7 +29,7 @@ use oxim_store::Delivery;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use tokio::sync::mpsc;
-use tracing::warn;
+use tracing::{debug, warn};
 
 pub use raw::{AstmRawTcpSettings, AstmRawTcpSource};
 
@@ -263,6 +263,9 @@ impl AstmSerialSettings {
     }
 }
 
+/// How long a reply to the analyzer may wait for the link.
+const REPLY_SEND_TIMEOUT: Duration = Duration::from_secs(120);
+
 /// Receives messages from an analyzer over a shared LIS01 link and stores
 /// them before acknowledging their final frame.
 #[derive(Debug)]
@@ -287,12 +290,38 @@ impl SourceConnector for AstmSource {
                         peer: Some(inbound.peer),
                         ..SubmitInfo::default()
                     };
-                    let stored = context.submit(inbound.text, info).await;
-                    if let Err(error) = &stored {
+                    // Channels that answer (host queries) store the message,
+                    // acknowledge it, and send the reply as a new
+                    // transmission once it is ready, as LIS01 requires.
+                    let pending = if context.responds() {
+                        context.begin_request(inbound.text, info).await.map(Some)
+                    } else {
+                        context.submit(inbound.text, info).await.map(|_| None)
+                    };
+                    if let Err(error) = &pending {
                         warn!(link = link.key(), %error, "cannot store an ASTM message; the analyzer will retransmit it");
                     }
                     if let Some(confirm) = inbound.confirm {
-                        let _ = confirm.send(stored.is_ok());
+                        let _ = confirm.send(pending.is_ok());
+                    }
+                    if let Ok(Some(pending)) = pending {
+                        let link = link.clone();
+                        tokio::spawn(async move {
+                            let reply = pending.reply().await;
+                            match reply.data {
+                                Some(data) => {
+                                    if let Err(failure) = link.send(data, REPLY_SEND_TIMEOUT).await {
+                                        warn!(link = link.key(), id = %reply.message_id, ?failure, "cannot send the reply to the analyzer");
+                                    }
+                                }
+                                None => debug!(
+                                    link = link.key(),
+                                    id = %reply.message_id,
+                                    reason = reply.error.as_deref().unwrap_or_default(),
+                                    "no reply for the analyzer"
+                                ),
+                            }
+                        });
                     }
                 }
             }
