@@ -1,7 +1,7 @@
 [package]
 name = "oxim-connectors"
-description = "Source and destination connectors for the OXIM integration engine"
-keywords = ["healthcare", "hl7", "mllp", "interoperability", "integration-engine"]
+description = "Source and destination connectors for OXIM channels: MLLP, TCP, files, HTTP, ASTM, POCT1-A and serial lines"
+keywords = ["healthcare", "hl7", "astm", "mllp", "laboratory"]
 categories = ["network-programming"]
 readme = "README.md"
 version.workspace = true
@@ -22,10 +22,12 @@ hyper.workspace = true
 hyper-rustls.workspace = true
 hyper-util.workspace = true
 memchr.workspace = true
+oxim-astm.workspace = true
 oxim-core.workspace = true
 oxim-hl7.workspace = true
 oxim-mllp.workspace = true
 oxim-model.workspace = true
+oxim-poct1a.workspace = true
 oxim-store.workspace = true
 rustls.workspace = true
 rustls-native-certs.workspace = true
@@ -33,6 +35,7 @@ rustls-pki-types.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util", "net"] }
+tokio-serial.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

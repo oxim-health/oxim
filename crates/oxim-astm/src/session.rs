@@ -12,6 +12,13 @@
 //! on every [`Output`] from [`Session::poll_output`]: write
 //! [`Output::Transmit`] bytes to the link and process received messages.
 //!
+//! By default every frame is acknowledged as soon as it is valid. With
+//! [`SessionConfig::defer_final_ack`], the frame that completes a message is
+//! acknowledged only after the caller confirms it stored the message
+//! ([`Output::ReceivedPending`], [`Session::confirm_received`],
+//! [`Session::reject_received`]), so the sender never believes an unstored
+//! message was delivered.
+//!
 //! ```
 //! use std::time::{Duration, Instant};
 //! use oxim_astm::session::{Output, Session, SessionConfig};
@@ -82,6 +89,25 @@ pub struct SessionConfig {
     pub max_frame_text: usize,
     /// The largest message accepted in either direction.
     pub max_message_len: usize,
+    /// Hold the acknowledgment of the frame that completes a received
+    /// message until the caller confirms the message is stored (off by
+    /// default).
+    ///
+    /// LIS01 acknowledges every frame, and the sender considers a message
+    /// delivered once its last frame is acknowledged. With this option, when
+    /// a frame ending with ETX carries the terminator (`L`) record, the
+    /// session emits [`Output::ReceivedPending`] and withholds that frame's
+    /// ACK until [`Session::confirm_received`] (ACK) or
+    /// [`Session::reject_received`] (NAK, so the sender retransmits the
+    /// frame) is called. The caller must answer well within the sender's
+    /// 15-second reply window, normally within milliseconds; after
+    /// [`SessionConfig::confirmation_timeout`] the session refuses the frame
+    /// itself.
+    pub defer_final_ack: bool,
+    /// How long a withheld acknowledgment waits for
+    /// [`Session::confirm_received`] before the frame is refused with NAK
+    /// (10 s, below the sender's 15-second reply timeout).
+    pub confirmation_timeout: Duration,
 }
 
 impl Default for SessionConfig {
@@ -97,6 +123,8 @@ impl Default for SessionConfig {
             max_retransmissions: 6,
             max_frame_text: crate::frame::MAX_FRAME_TEXT,
             max_message_len: 16 * 1024 * 1024,
+            defer_final_ack: false,
+            confirmation_timeout: Duration::from_secs(10),
         }
     }
 }
@@ -182,6 +210,10 @@ pub enum Event {
         /// Bytes of text received.
         received: usize,
     },
+    /// A withheld acknowledgment was not confirmed within
+    /// [`SessionConfig::confirmation_timeout`]; the frame was refused so the
+    /// sender retransmits it.
+    ConfirmationTimeout,
     /// Bytes that mean nothing in the current state were ignored.
     Ignored {
         /// How many bytes.
@@ -199,6 +231,11 @@ pub enum Output {
     /// of every frame between ENQ and EOT, normally one ASTM E1394 message
     /// (`H` ... `L`) with CR-terminated records.
     Received(Vec<u8>),
+    /// With [`SessionConfig::defer_final_ack`]: a complete message whose last
+    /// frame is not acknowledged yet. Store it, then call
+    /// [`Session::confirm_received`], or [`Session::reject_received`] if it
+    /// could not be stored.
+    ReceivedPending(Vec<u8>),
     /// Every frame of a queued message was acknowledged.
     Delivered(MessageId),
     /// A queued message was abandoned. It is not retried automatically.
@@ -236,6 +273,17 @@ struct Reception {
     received: usize,
     complete: bool,
     overflow: bool,
+    deadline: Instant,
+    /// A completed message whose final frame is not acknowledged yet.
+    pending: Option<PendingAck>,
+}
+
+/// What is needed to undo the final frame of a message if it is rejected.
+#[derive(Debug, Clone, Copy)]
+struct PendingAck {
+    number: u8,
+    previous_last: Option<u8>,
+    frame_len: usize,
     deadline: Instant,
 }
 
@@ -295,6 +343,59 @@ impl Session {
         matches!(self.state, State::Neutral | State::Holding { .. }) && self.queue.is_empty()
     }
 
+    /// Whether a received message waits for [`Session::confirm_received`]
+    /// or [`Session::reject_received`].
+    pub fn awaiting_confirmation(&self) -> bool {
+        matches!(&self.state, State::Receiving(reception) if reception.pending.is_some())
+    }
+
+    /// Acknowledges the frame that completed the message reported by
+    /// [`Output::ReceivedPending`], after the caller stored it. Input
+    /// received meanwhile is processed. Returns `false` when no message was
+    /// waiting, for example because the confirmation timeout already refused
+    /// the frame.
+    pub fn confirm_received(&mut self, now: Instant) -> bool {
+        let receive_timeout = self.config.receive_timeout;
+        let State::Receiving(reception) = &mut self.state else {
+            return false;
+        };
+        if reception.pending.take().is_none() {
+            return false;
+        }
+        // The message is delivered; later frames start a new one.
+        reception.text.clear();
+        reception.received = 0;
+        reception.deadline = now + receive_timeout;
+        self.transmit(vec![ACK]);
+        self.handle_input(&[], now);
+        true
+    }
+
+    /// Refuses the frame that completed the message reported by
+    /// [`Output::ReceivedPending`] with NAK, so the sender retransmits it
+    /// and the message is reported again. Returns `false` when no message
+    /// was waiting.
+    pub fn reject_received(&mut self, now: Instant) -> bool {
+        let receive_timeout = self.config.receive_timeout;
+        let State::Receiving(reception) = &mut self.state else {
+            return false;
+        };
+        let Some(pending) = reception.pending.take() else {
+            return false;
+        };
+        // Undo the final frame so its retransmission is accepted again.
+        let keep = reception.text.len().saturating_sub(pending.frame_len);
+        reception.text.truncate(keep);
+        reception.received = reception.received.saturating_sub(pending.frame_len);
+        reception.expected = pending.number;
+        reception.last = pending.previous_last;
+        reception.complete = false;
+        reception.deadline = now + receive_timeout;
+        self.transmit(vec![NAK]);
+        self.handle_input(&[], now);
+        true
+    }
+
     /// The number of queued messages, excluding one being sent.
     pub fn queued(&self) -> usize {
         self.queue.len()
@@ -347,7 +448,11 @@ impl Session {
             State::Holding { until } => Some(*until),
             State::Establishing { deadline } => Some(*deadline),
             State::Transferring(transfer) => Some(transfer.deadline),
-            State::Receiving(reception) => Some(reception.deadline),
+            State::Receiving(reception) => Some(
+                reception
+                    .pending
+                    .map_or(reception.deadline, |pending| pending.deadline),
+            ),
         }
     }
 
@@ -374,7 +479,17 @@ impl Session {
                 self.state = State::Neutral;
                 self.try_start(now);
             }
-            State::Receiving(reception) if now >= reception.deadline => {
+            State::Receiving(reception)
+                if reception
+                    .pending
+                    .is_some_and(|pending| now >= pending.deadline) =>
+            {
+                self.event(Event::ConfirmationTimeout);
+                self.reject_received(now);
+            }
+            State::Receiving(reception)
+                if reception.pending.is_none() && now >= reception.deadline =>
+            {
                 let discarded = reception.text.len();
                 self.event(Event::ReceiveTimeout { discarded });
                 self.state = State::Neutral;
@@ -456,6 +571,11 @@ impl Session {
     }
 
     fn input_while_receiving(&mut self, byte: u8, now: Instant) -> bool {
+        // While a message waits for confirmation, input stays buffered: the
+        // sender waits for our reply, and anything else is handled after it.
+        if matches!(&self.state, State::Receiving(reception) if reception.pending.is_some()) {
+            return false;
+        }
         match byte {
             STX => match decode_frame(&self.input, self.config.max_frame_text) {
                 Decoded::Incomplete => return false,
@@ -506,15 +626,20 @@ impl Session {
             complete: false,
             overflow: false,
             deadline: now + self.config.receive_timeout,
+            pending: None,
         });
     }
 
     fn frame_received(&mut self, frame: Frame, now: Instant) {
         let max = self.config.max_message_len;
+        let defer = self.config.defer_final_ack;
+        let confirmation_timeout = self.config.confirmation_timeout;
+        let receive_timeout = self.config.receive_timeout;
         let State::Receiving(reception) = &mut self.state else {
             return;
         };
         let (reply, event) = if frame.number() == reception.expected {
+            let previous_last = reception.last;
             reception.received += frame.text().len();
             if !reception.overflow {
                 if reception.text.len() + frame.text().len() > max {
@@ -527,6 +652,19 @@ impl Session {
             reception.last = Some(frame.number());
             reception.expected = (frame.number() + 1) % 8;
             reception.complete = frame.is_last();
+            if defer && !reception.overflow && frame.is_last() && ends_with_terminator(frame.text())
+            {
+                reception.pending = Some(PendingAck {
+                    number: frame.number(),
+                    previous_last,
+                    frame_len: frame.text().len(),
+                    deadline: now + confirmation_timeout,
+                });
+                reception.deadline = now + receive_timeout;
+                let text = reception.text.clone();
+                self.outputs.push_back(Output::ReceivedPending(text));
+                return;
+            }
             (ACK, None)
         } else if Some(frame.number()) == reception.last {
             (
@@ -703,4 +841,13 @@ impl Session {
     fn event(&mut self, event: Event) {
         self.outputs.push_back(Output::Event(event));
     }
+}
+
+/// Whether the last record of `text` is a terminator (`L`) record.
+fn ends_with_terminator(text: &[u8]) -> bool {
+    let body = text.strip_suffix(b"\r").unwrap_or(text);
+    let start = body.iter().rposition(|&b| b == b'\r').map_or(0, |i| i + 1);
+    let record = &body[start..];
+    // `L` followed by a field delimiter, or a bare `L`.
+    record.first() == Some(&b'L') && record.get(1).is_none_or(|b| !b.is_ascii_alphanumeric())
 }
