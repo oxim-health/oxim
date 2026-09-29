@@ -293,7 +293,7 @@ impl SourceContext {
         Ok(PendingReply {
             shared,
             work: Pending::Process {
-                envelope,
+                envelope: Box::new(envelope),
                 config,
                 watch,
             },
@@ -306,7 +306,7 @@ enum Pending {
     Submitted(MessageId),
     /// The message is stored and waits for processing and its reply.
     Process {
-        envelope: Envelope,
+        envelope: Box<Envelope>,
         config: ResponseConfig,
         watch: Option<(ConnectorId, oneshot::Receiver<DeliveryReport>)>,
     },
@@ -356,7 +356,7 @@ impl PendingReply {
             } => (envelope, config, watch),
         };
         let id = envelope.id;
-        let processed = crate::engine::process_and_record(&shared, envelope).await;
+        let processed = crate::engine::process_and_record(&shared, *envelope).await;
         // Mirror the store: a transformed message without queued
         // destinations is complete.
         let status = match processed.status {
