@@ -16,6 +16,7 @@ pub(crate) fn registry(settings: &Settings) -> Registry {
     oxim_mapping::register(&mut registry);
     oxim_fhir::register(&mut registry);
     oxim_dicom::register(&mut registry);
+    oxim_cda::register(&mut registry);
     oxim_transform::register(
         &mut registry,
         TransformEnvironment::new(settings.tables_dir.clone()),

@@ -20,7 +20,12 @@ pub enum Document {
     Astm(oxim_astm::Message),
     /// POCT1-A XML.
     Poct1a(oxim_poct1a::Message),
-    /// JSON, XML, delimited text or fixed-width records.
+    /// ASC X12 EDI interchanges.
+    X12(oxim_x12::Interchange),
+    /// NCPDP Telecommunication Standard transmissions.
+    Ncpdp(oxim_ncpdp::Transmission),
+    /// JSON, XML (including CDA documents), delimited text or fixed-width
+    /// records.
     Format(oxim_formats::Document),
     /// Bytes of a data type that is not parsed.
     Raw(Vec<u8>),
@@ -33,6 +38,8 @@ impl Document {
             Self::Hl7(_) => DataType::Hl7V2,
             Self::Astm(_) => DataType::Astm,
             Self::Poct1a(_) => DataType::Poct1a,
+            Self::X12(_) => DataType::X12,
+            Self::Ncpdp(_) => DataType::Ncpdp,
             #[allow(unreachable_patterns)]
             Self::Format(document) => match document {
                 oxim_formats::Document::Json(_) => DataType::Json,
@@ -51,6 +58,8 @@ impl Document {
             Self::Hl7(message) => message.to_bytes(),
             Self::Astm(message) => message.to_bytes(),
             Self::Poct1a(message) => message.to_bytes(),
+            Self::X12(interchange) => interchange.to_bytes(),
+            Self::Ncpdp(transmission) => transmission.to_bytes(),
             Self::Format(document) => document.to_bytes(),
             Self::Raw(bytes) => bytes.clone(),
         }
@@ -58,7 +67,8 @@ impl Document {
 
     /// The text at `path`, with escape sequences resolved. Path syntax
     /// depends on the data type: `PID-5.1` (HL7), `R[2]-4` (ASTM),
-    /// `SVC/PT/OBS/OBS.value` (POCT1-A), `/order/test/@code` (XML),
+    /// `SVC/PT/OBS/OBS.value` (POCT1-A), `NM1[2]-3` or `CLM05-01` (X12),
+    /// `AM07.D2` (NCPDP), `/order/test/@code` (XML, CDA),
     /// `results[0].value` (JSON), `3/name` (delimited, fixed width).
     pub fn get(&self, path: &str) -> Result<Option<String>, StepError> {
         Ok(match self {
@@ -72,6 +82,10 @@ impl Document {
                 .get(path)
                 .map(|value| value.to_string_lossy().into_owned()),
             Self::Poct1a(message) => message.value(path).map(str::to_owned),
+            Self::X12(interchange) => interchange
+                .get(path)
+                .map(|value| value.to_string_lossy().into_owned()),
+            Self::Ncpdp(transmission) => transmission.get(path),
             Self::Format(document) => document
                 .get(path)
                 .map_err(|e| StepError::new("get", e.to_string()))?,
@@ -91,6 +105,8 @@ impl Document {
             Self::Hl7(message) => message.set(path, text).map_err(|e| error(&e)),
             Self::Astm(message) => message.set_text(path, text, UTF_8).map_err(|e| error(&e)),
             Self::Format(document) => document.set(path, text).map_err(|e| error(&e)),
+            Self::X12(interchange) => interchange.set(path, text).map_err(|e| error(&e)),
+            Self::Ncpdp(transmission) => transmission.set(path, text).map_err(|e| error(&e)),
             Self::Poct1a(_) => Err(StepError::new(
                 "set",
                 "POCT1-A documents are edited through the normalized model",
@@ -128,7 +144,9 @@ impl DocumentParser {
         };
         let format = match data_type {
             DataType::Json => Some(oxim_formats::DataType::Json(JsonOptions::default())),
-            DataType::Xml => Some(oxim_formats::DataType::Xml(XmlOptions::default())),
+            DataType::Xml | DataType::Cda => {
+                Some(oxim_formats::DataType::Xml(XmlOptions::default()))
+            }
             DataType::Delimited => Some(oxim_formats::DataType::Delimited(delimited_options(
                 settings, encoding,
             )?)),
@@ -157,6 +175,12 @@ impl DocumentParser {
             }
             (DataType::Poct1a, _) => {
                 Document::Poct1a(oxim_poct1a::Message::parse(raw).map_err(|e| error(&e))?)
+            }
+            (DataType::X12, _) => {
+                Document::X12(oxim_x12::Interchange::parse(raw).map_err(|e| error(&e))?)
+            }
+            (DataType::Ncpdp, _) => {
+                Document::Ncpdp(oxim_ncpdp::Transmission::parse(raw).map_err(|e| error(&e))?)
             }
             (_, Some(format)) => {
                 Document::Format(oxim_formats::Document::parse(raw, format).map_err(|e| error(&e))?)
@@ -273,6 +297,34 @@ mod tests {
         .unwrap();
         let doc = csv.parse(b"code;value\r\nGLU;5.4\r\n").unwrap();
         assert_eq!(doc.data_type(), DataType::Delimited);
+
+        let x12 = DocumentParser::new(DataType::X12, None).unwrap();
+        let mut doc = x12
+            .parse(b"ISA*00*          *00*          *ZZ*A              *ZZ*B              *260929*1200*^*00501*000000001*0*T*:~NM1*IL*1*DOE~IEA*0*000000001~")
+            .unwrap();
+        assert_eq!(doc.get("NM103").unwrap().as_deref(), Some("DOE"));
+        doc.set("NM1-4", "JANE").unwrap();
+        assert_eq!(doc.get("NM1-4").unwrap().as_deref(), Some("JANE"));
+        assert!(doc.set("NM1-4", "A*B").is_err());
+        assert_eq!(doc.data_type(), DataType::X12);
+
+        let ncpdp = DocumentParser::new(DataType::Ncpdp, None).unwrap();
+        let mut doc = ncpdp
+            .parse(b"999999D0B1PCN1234567101SYNTHPHARM01   20260929SYNTHVEND1\x1d\x1e\x1cAM07\x1cEM1\x1cD2000000123456")
+            .unwrap();
+        assert_eq!(doc.get("HDR.A3").unwrap().as_deref(), Some("B1"));
+        doc.set("AM07.D2", "000000999999").unwrap();
+        assert_eq!(doc.get("AM07.D2").unwrap().as_deref(), Some("000000999999"));
+        assert_eq!(doc.data_type(), DataType::Ncpdp);
+
+        let cda = DocumentParser::new(DataType::Cda, None).unwrap();
+        let doc = cda
+            .parse(b"<ClinicalDocument xmlns=\"urn:hl7-org:v3\"><title>Report</title></ClinicalDocument>")
+            .unwrap();
+        assert_eq!(
+            doc.get("/ClinicalDocument/title").unwrap().as_deref(),
+            Some("Report")
+        );
 
         let raw = DocumentParser::new(DataType::Dicom, None).unwrap();
         let doc = raw.parse(b"\x00\x01").unwrap();

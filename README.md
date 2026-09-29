@@ -25,6 +25,8 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-formats`](crates/oxim-formats) | Lossless JSON, XML, delimited and fixed-width documents |
 | [`crates/oxim-model`](crates/oxim-model) | Message envelope, identifiers and the normalized, FHIR-aligned clinical model |
 | [`crates/oxim-poct1a`](crates/oxim-poct1a) | POCT1-A stream splitting, lossless messages, builders and the host conversation |
+| [`crates/oxim-x12`](crates/oxim-x12) | Lossless ASC X12 interchanges, envelope validation and TA1/997/999 acknowledgments |
+| [`crates/oxim-ncpdp`](crates/oxim-ncpdp) | Lossless NCPDP Telecommunication Standard (D.0) transmissions and responses |
 | [`crates/oxim-store`](crates/oxim-store) | Durable message store and per-destination delivery queues (SQLite) |
 | [`crates/oxim-core`](crates/oxim-core) | Channel runtime: sources, pipeline, durable queues, destination workers and configuration |
 | [`crates/oxim-auth`](crates/oxim-auth) | Users, roles, Argon2id passwords, sessions, API tokens and login throttling |
@@ -34,6 +36,7 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-transform`](crates/oxim-transform) | Declarative filters, mapping operations and code tables |
 | [`crates/oxim-mapping`](crates/oxim-mapping) | Mappings between HL7 v2, ASTM, POCT1-A and the normalized clinical model (normalizers and encoders) |
 | [`crates/oxim-fhir`](crates/oxim-fhir) | HL7 FHIR R4 JSON resources, mapping to and from the normalized model, transaction response summaries |
+| [`crates/oxim-cda`](crates/oxim-cda) | HL7 CDA R2 header and section extraction, laboratory results and report generation |
 | [`crates/oxim-lab`](crates/oxim-lab) | Laboratory workflows: order cache, host query answers, test routing and worklist download |
 | [`crates/oxim-script`](crates/oxim-script) | JavaScript filters, transformers and encoders in an embedded QuickJS sandbox, with Mirth Connect compatibility |
 | [`crates/oxim-connectors`](crates/oxim-connectors) | Source and destination connectors: MLLP, raw TCP, files, HTTP, ASTM over TCP and serial, POCT1-A |
