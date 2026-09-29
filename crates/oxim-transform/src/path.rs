@@ -70,6 +70,12 @@ pub(crate) fn occurrences(document: &Document, prefix: &str) -> Result<usize, St
         Document::Hl7(_) | Document::Astm(_) if is_segment_id(prefix) => {
             Box::new(move |n| format!("{prefix}[{n}]-1"))
         }
+        // Element 0 of an X12 segment is its identifier.
+        Document::X12(_) if is_segment_id(prefix) => Box::new(move |n| format!("{prefix}[{n}]-0")),
+        // Field AM of an NCPDP segment is its identification.
+        Document::Ncpdp(_) if prefix.len() == 4 && prefix.starts_with("AM") => {
+            Box::new(move |n| format!("{prefix}[{n}].AM"))
+        }
         Document::Format(oxim_formats::Document::Xml(_)) => {
             Box::new(move |n| format!("{prefix}[{n}]"))
         }
@@ -77,7 +83,7 @@ pub(crate) fn occurrences(document: &Document, prefix: &str) -> Result<usize, St
             return Err(StepError::new(
                 "wildcard",
                 format!(
-                    "[*] after {prefix:?} is not supported here; use it after an HL7 segment, an ASTM record or an XML element"
+                    "[*] after {prefix:?} is not supported here; use it after an HL7, X12 or NCPDP segment, an ASTM record or an XML element"
                 ),
             ));
         }
@@ -132,5 +138,15 @@ mod tests {
             .parse(b"[1,2]")
             .unwrap();
         assert!(occurrences(&json, "items").is_err());
+        let x12 = DocumentParser::new(DataType::X12, None)
+            .unwrap()
+            .parse(b"ISA*00*          *00*          *ZZ*A              *ZZ*B              *260929*1200*^*00501*000000001*0*T*:~NM1*IL~NM1*85~N3*X~")
+            .unwrap();
+        assert_eq!(occurrences(&x12, "NM1").unwrap(), 2);
+        let ncpdp = DocumentParser::new(DataType::Ncpdp, None)
+            .unwrap()
+            .parse(b"999999D0B1PCN1234567101SYNTHPHARM01   20260929SYNTHVEND1\x1d\x1e\x1cAM07\x1cD21\x1d\x1e\x1cAM07\x1cD22")
+            .unwrap();
+        assert_eq!(occurrences(&ncpdp, "AM07").unwrap(), 2);
     }
 }

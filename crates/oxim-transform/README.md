@@ -14,9 +14,9 @@ Steps carry values; they never interpret them. Conditions compare text and numbe
 
 ## Paths
 
-Paths follow the document's data type: `PID-5.1` (HL7 v2), `R[2]-3.4` (ASTM, where the record type is field 1), `/order/test/@code` (XML), `results[0].value` (JSON), `2/code` (delimited and fixed width).
+Paths follow the document's data type: `PID-5.1` (HL7 v2), `R[2]-3.4` (ASTM, where the record type is field 1), `NM1[2]-3` or `CLM05-01` (X12), `AM07.D2` (NCPDP), `/order/test/@code` (XML and CDA), `results[0].value` (JSON), `2/code` (delimited and fixed width).
 
-A single `[*]` after an HL7 segment, an ASTM record or an XML element means "every occurrence": `OBX[*]-3.1`, `R[*]-3.4`, `/order/test[*]/@code`. A map operation with such a path runs once per occurrence. In a filter, a wildcard condition holds when any occurrence satisfies it.
+A single `[*]` after an HL7, X12 or NCPDP segment, an ASTM record or an XML element means "every occurrence": `OBX[*]-3.1`, `R[*]-3.4`, `NM1[*]-3`, `AM07[*].D2`, `/order/test[*]/@code`. A map operation with such a path runs once per occurrence. In a filter, a wildcard condition holds when any occurrence satisfies it.
 
 ## `condition` filter
 
