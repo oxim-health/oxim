@@ -14,7 +14,17 @@ homepage = "https://github.com/oxim-health/oxim"
 publish = false
 
 [workspace.dependencies]
+argon2 = "0.5"
 async-trait = "0.1"
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+base64 = "0.23"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+getrandom = "0.2"
+rpassword = "7"
+sha2 = "0.10"
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "logging", "tls12"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["fs"] }
 clap = { version = "4.6", features = ["derive"] }
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
@@ -44,6 +54,8 @@ tokio-util = "0.7"
 tracing = "0.1"
 
 oxim-astm = { path = "crates/oxim-astm" }
+oxim-auth = { path = "crates/oxim-auth" }
+oxim-server = { path = "crates/oxim-server" }
 oxim-connectors = { path = "crates/oxim-connectors" }
 oxim-core = { path = "crates/oxim-core" }
 oxim-fhir = { path = "crates/oxim-fhir" }

@@ -319,3 +319,12 @@ pub struct AuditEvent {
     /// Additional detail.
     pub detail: Option<String>,
 }
+
+/// Stored messages and deliveries counted by state, for metrics.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StatusCounts {
+    /// Messages per channel and status.
+    pub messages: Vec<(ChannelId, MessageStatus, u64)>,
+    /// Deliveries per channel, destination and status.
+    pub deliveries: Vec<(ChannelId, ConnectorId, DestinationStatus, u64)>,
+}
