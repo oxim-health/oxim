@@ -727,3 +727,29 @@ mod tests {
         assert_eq!(AdministrativeSex::from_hl7_code("X"), None);
     }
 }
+
+#[cfg(test)]
+mod number_tests {
+    use super::*;
+
+    /// Numbers inside the tagged `ClinicalContent` must survive JSON even
+    /// when serde_json's `arbitrary_precision` feature is enabled elsewhere
+    /// in the build.
+    #[test]
+    fn numbers_inside_tagged_content_round_trip() {
+        let content = ClinicalContent::Results {
+            device: None,
+            groups: vec![ResultGroup {
+                observations: vec![Observation {
+                    sequence: Some(3),
+                    code: CodeableConcept::from_coding(Coding::new("GLU")),
+                    ..Observation::default()
+                }],
+                ..ResultGroup::default()
+            }],
+        };
+        let json = serde_json::to_string(&content).unwrap();
+        let back: ClinicalContent = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, content);
+    }
+}
