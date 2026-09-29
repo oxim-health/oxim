@@ -1,0 +1,19 @@
+# OXIM configuration for the Docker demo (deploy/docker/compose.yaml).
+# Mounted at /etc/oxim/oxim.yaml; relative paths resolve against /etc/oxim.
+data_dir: /var/lib/oxim
+channels_dir: channels
+tables_dir: tables
+
+log:
+  level: info
+  format: text
+
+retention:
+  contents_after: 7d
+  messages_after: 30d
+  orders_after: 7d
+  interval: 1h
+
+reload:
+  enabled: true
+  interval: 5s

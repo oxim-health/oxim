@@ -1,0 +1,70 @@
+#!/bin/sh
+# Debian postinst for OXIM: creates the service account and directories and
+# enables (but does not start) the service.
+set -e
+
+create_account() {
+    if command -v systemd-sysusers >/dev/null 2>&1; then
+        systemd-sysusers oxim.conf
+        return
+    fi
+    if ! getent group oxim >/dev/null; then
+        addgroup --system oxim
+    fi
+    if ! getent passwd oxim >/dev/null; then
+        adduser --system --ingroup oxim --home /var/lib/oxim --no-create-home \
+            --shell /usr/sbin/nologin --gecos "OXIM integration engine" oxim
+    fi
+    if getent group dialout >/dev/null; then
+        adduser oxim dialout >/dev/null
+    fi
+}
+
+create_directories() {
+    if command -v systemd-tmpfiles >/dev/null 2>&1; then
+        systemd-tmpfiles --create oxim.conf
+    else
+        install -d -m 0750 -o root -g oxim /etc/oxim /etc/oxim/channels /etc/oxim/tables
+        install -d -m 0750 -o oxim -g oxim /var/lib/oxim /var/log/oxim
+    fi
+    # The configuration may hold credentials: only the service group reads it.
+    chown root:oxim /etc/oxim/oxim.yaml
+    chmod 0640 /etc/oxim/oxim.yaml
+}
+
+case "$1" in
+    configure)
+        create_account
+        create_directories
+        # Undo the mask that postrm sets on removal.
+        if command -v deb-systemd-helper >/dev/null 2>&1; then
+            deb-systemd-helper unmask oxim.service >/dev/null || true
+        fi
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload >/dev/null || true
+        fi
+        if [ -z "$2" ]; then
+            # First installation: enable, but do not start before channels
+            # are configured.
+            if command -v deb-systemd-helper >/dev/null 2>&1; then
+                deb-systemd-helper enable oxim.service >/dev/null || true
+            elif [ -d /run/systemd/system ]; then
+                systemctl enable oxim.service >/dev/null || true
+            fi
+            echo "OXIM is installed and enabled. Add channel files to /etc/oxim/channels,"
+            echo "check them with 'oxim validate -c /etc/oxim/oxim.yaml' and start the"
+            echo "service with 'systemctl start oxim'."
+        elif [ -d /run/systemd/system ]; then
+            # Upgrade: restart only if it was running.
+            systemctl try-restart oxim.service >/dev/null || true
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

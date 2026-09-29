@@ -1,0 +1,12 @@
+# Build context for deploy/docker/Dockerfile: sources only.
+.git
+.github
+.claude
+target
+fuzz
+deploy
+docs
+**/*.db
+**/*.db-shm
+**/*.db-wal
+/data

@@ -1,0 +1,27 @@
+# Receive results from an ASTM analyzer, translate its test codes to the
+# LIS codes and deliver them to the LIS as HL7 v2 ORU^R01 over MLLP.
+# Needs tables/analyzer-codes.csv in the tables directory.
+id: analyzer-to-lis
+name: Chemistry analyzer to LIS
+enabled: true
+source:
+  type: astm-tcp
+  data_type: astm
+  normalize: true
+  settings:
+    listen: 0.0.0.0:5100
+transformers:
+  - type: map-observations
+    table: analyzer-codes.csv
+    on_missing: keep
+destinations:
+  - id: lis
+    type: mllp
+    filters:
+      - {type: clinical-kind, kinds: [results, quality_control]}
+    encoder:
+      type: hl7v2-oru-r01
+      sending_application: OXIM
+      receiving_application: LIS
+    settings:
+      target: lis.example.internal:2576
