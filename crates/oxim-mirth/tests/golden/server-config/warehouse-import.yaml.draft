@@ -1,0 +1,19 @@
+# Imported from Mirth Connect channel "Warehouse Import" (0d2e4c1a-5b6f-4a7e-9c8d-300000000003) by oxim-mirth.
+# Migration report: 2 converted, 0 approximated, 2 unsupported item(s).
+# DRAFT: OXIM has no equivalent for the Mirth source connector yet. Replace the
+# source and rename this file to .yaml; OXIM does not load .yaml.draft files.
+
+id: warehouse-import
+name: Warehouse Import
+enabled: false
+source:
+  type: unsupported
+  data_type: xml
+  settings: {mirth_transport: Database Reader}
+transformers:
+- type: script
+  mirth: true
+  source: |-
+    // Mirth transformer step: Wrap
+    tmp = msg;
+destinations: []

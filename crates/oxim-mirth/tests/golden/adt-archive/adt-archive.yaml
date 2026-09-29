@@ -1,0 +1,29 @@
+# Imported from Mirth Connect channel "ADT Archive" (0d2e4c1a-5b6f-4a7e-9c8d-100000000001) by oxim-mirth.
+# Migration report: 14 converted, 0 approximated, 0 unsupported item(s).
+
+id: adt-archive
+name: ADT Archive
+description: |-
+  Receives ADT and ORU messages over MLLP
+  and archives them as files.
+enabled: true
+source:
+  type: mllp
+  data_type: hl7v2
+  settings: {listen: "127.0.0.1:6661", max_connections: 10}
+filters:
+- {type: path-in, path: MSH-9.1, values: [ADT, ORU]}
+- {type: path-exists, path: PID-3.1}
+- {type: condition, not: {path: MSH-3.1, matches: TEST}}
+transformers:
+- type: map
+  operations:
+  - {set: {path: MSH-6.1, value: ARCHIVE}}
+  - {store: {path: PID-3.1, as: patientId}}
+  - {copy: {from: PID-3.1, to: PID-2.1}}
+  - {set: {path: PID-8, value: "{PID-8|U}"}}
+destinations:
+- id: archive
+  type: file
+  queue: {retry: {initial_delay: "5s", max_delay: "5s", multiplier: 1}}
+  settings: {directory: /var/lib/oxim/archive, filename: "{message_id}.hl7"}
