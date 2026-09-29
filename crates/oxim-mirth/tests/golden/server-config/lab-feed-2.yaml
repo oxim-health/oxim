@@ -1,0 +1,33 @@
+# Imported from Mirth Connect channel "Lab Feed" (0d2e4c1a-5b6f-4a7e-9c8d-300000000002) by oxim-mirth.
+# Migration report: 9 converted, 3 approximated, 1 unsupported item(s).
+
+id: lab-feed-2
+name: Lab Feed
+enabled: true
+source: {type: mllp, data_type: hl7v2, settings: {listen: "0.0.0.0:6662"}}
+filters:
+- type: condition
+  any:
+  - {all: [{path: MSH-3.1, equals: CHEM}, {path: ORC-7.6, equals: S}]}
+  - {path: MSH-3.1, matches: "HEMA|CBC\\."}
+destinations:
+- id: destination-1
+  type: tcp
+  queue:
+    retry:
+      initial_delay: "1500ms"
+      max_delay: "1500ms"
+      multiplier: 1
+      max_attempts: 3
+  settings: {target: "10.0.0.30:9100", framing: {mode: none}}
+- id: destination-1-2
+  type: file
+  queue:
+    retry:
+      initial_delay: "10s"
+      max_delay: "10s"
+      multiplier: 1
+      max_attempts: 1
+  settings:
+    directory: /var/lib/lab/journal
+    filename: "journal-{message_id}.txt"

@@ -1,0 +1,41 @@
+# Imported from Mirth Connect channel "Lab Feed" (0d2e4c1a-5b6f-4a7e-9c8d-300000000001) by oxim-mirth.
+# Migration report: 5 converted, 2 approximated, 0 unsupported item(s).
+
+id: lab-feed
+name: Lab Feed
+description: Picks up delimited export files.
+enabled: true
+source:
+  type: file
+  data_type: delimited
+  format: {delimiter: ";", header: true}
+  settings:
+    directory: /var/lib/lab/inbox
+    pattern: "*.csv"
+    poll_interval: "10s"
+    sort: name
+    after: move
+    processed_directory: /var/lib/lab/inbox/done
+    error_directory: /var/lib/lab/inbox/error
+    max_file_size: 1048576
+filters:
+- type: script
+  mirth: true
+  source: |-
+    // Mirth filter rule: Non-empty
+    // Code template "isValid" (library "Validation")
+    function isValid(message) {
+    	return message.toString().indexOf(';') != -1;
+    }
+
+    return msg.toString().length > 0 && isValid(msg);
+destinations:
+- id: lis-rest
+  type: http
+  queue: {retry: {initial_delay: "1s", max_delay: "1s", multiplier: 1}}
+  settings:
+    url: "https://lis.example.org/api/results"
+    method: PUT
+    headers: {Accept: application/json}
+    content_type: application/json
+    timeout: "30s"

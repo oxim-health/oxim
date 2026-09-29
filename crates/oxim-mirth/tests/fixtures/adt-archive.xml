@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic Mirth Connect 3.12 channel export written for the OXIM test suite. -->
+<channel version="3.12.0">
+  <id>0d2e4c1a-5b6f-4a7e-9c8d-100000000001</id>
+  <nextMetaDataId>3</nextMetaDataId>
+  <name>ADT Archive</name>
+  <description>Receives ADT and ORU messages over MLLP
+and archives them as files.</description>
+  <revision>4</revision>
+  <sourceConnector version="3.12.0">
+    <metaDataId>0</metaDataId>
+    <name>sourceConnector</name>
+    <properties class="com.mirth.connect.connectors.tcp.TcpReceiverProperties" version="3.12.0">
+      <pluginProperties/>
+      <listenerConnectorProperties version="3.12.0">
+        <host>127.0.0.1</host>
+        <port>${mllp_port}</port>
+      </listenerConnectorProperties>
+      <sourceConnectorProperties version="3.12.0">
+        <responseVariable>Auto-generate (After source transformer)</responseVariable>
+        <respondAfterProcessing>true</respondAfterProcessing>
+        <processBatch>false</processBatch>
+        <firstResponse>false</firstResponse>
+        <processingThreads>1</processingThreads>
+        <queueBufferSize>1000</queueBufferSize>
+      </sourceConnectorProperties>
+      <transmissionModeProperties class="com.mirth.connect.plugins.mllpmode.MLLPModeProperties">
+        <pluginPointName>MLLP</pluginPointName>
+        <startOfMessageBytes>0B</startOfMessageBytes>
+        <endOfMessageBytes>1C0D</endOfMessageBytes>
+        <useMLLPv2>false</useMLLPv2>
+        <ackBytes>06</ackBytes>
+        <nackBytes>15</nackBytes>
+        <maxRetries>2</maxRetries>
+      </transmissionModeProperties>
+      <serverMode>true</serverMode>
+      <remoteAddress></remoteAddress>
+      <remotePort></remotePort>
+      <overrideLocalBinding>false</overrideLocalBinding>
+      <reconnectInterval>5000</reconnectInterval>
+      <receiveTimeout>0</receiveTimeout>
+      <bufferSize>65536</bufferSize>
+      <maxConnections>10</maxConnections>
+      <keepConnectionOpen>true</keepConnectionOpen>
+      <dataTypeBinary>false</dataTypeBinary>
+      <charsetEncoding>DEFAULT_ENCODING</charsetEncoding>
+      <respondOnNewConnection>0</respondOnNewConnection>
+      <responseAddress></responseAddress>
+      <responsePort></responsePort>
+    </properties>
+    <transformer version="3.12.0">
+      <elements>
+        <com.mirth.connect.plugins.messagebuilder.MessageBuilderStep version="3.12.0">
+          <name>Set receiving facility</name>
+          <sequenceNumber>0</sequenceNumber>
+          <enabled>true</enabled>
+          <messageSegment>msg['MSH']['MSH.6']['MSH.6.1']</messageSegment>
+          <mapping>'ARCHIVE'</mapping>
+          <defaultValue></defaultValue>
+          <replacements/>
+        </com.mirth.connect.plugins.messagebuilder.MessageBuilderStep>
+        <com.mirth.connect.plugins.mapper.MapperStep version="3.12.0">
+          <name>patientId</name>
+          <sequenceNumber>1</sequenceNumber>
+          <enabled>true</enabled>
+          <variable>patientId</variable>
+          <mapping>msg['PID']['PID.3']['PID.3.1'].toString()</mapping>
+          <defaultValue></defaultValue>
+          <replacements/>
+          <scope>CHANNEL</scope>
+        </com.mirth.connect.plugins.mapper.MapperStep>
+        <com.mirth.connect.plugins.messagebuilder.MessageBuilderStep version="3.12.0">
+          <name>Copy patient id</name>
+          <sequenceNumber>2</sequenceNumber>
+          <enabled>true</enabled>
+          <messageSegment>msg['PID']['PID.2']['PID.2.1']</messageSegment>
+          <mapping>msg['PID']['PID.3']['PID.3.1'].toString()</mapping>
+          <defaultValue></defaultValue>
+          <replacements/>
+        </com.mirth.connect.plugins.messagebuilder.MessageBuilderStep>
+        <com.mirth.connect.plugins.messagebuilder.MessageBuilderStep version="3.12.0">
+          <name>Default sex</name>
+          <sequenceNumber>3</sequenceNumber>
+          <enabled>true</enabled>
+          <messageSegment>msg['PID']['PID.8']</messageSegment>
+          <mapping>msg['PID']['PID.8'].toString()</mapping>
+          <defaultValue>U</defaultValue>
+          <replacements/>
+        </com.mirth.connect.plugins.messagebuilder.MessageBuilderStep>
+        <com.mirth.connect.plugins.javascriptstep.JavaScriptStep version="3.12.0">
+          <name>Old logging</name>
+          <sequenceNumber>4</sequenceNumber>
+          <enabled>false</enabled>
+          <script>logger.info('received');</script>
+        </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+      </elements>
+      <inboundTemplate encoding="base64"></inboundTemplate>
+      <outboundTemplate encoding="base64"></outboundTemplate>
+      <inboundDataType>HL7V2</inboundDataType>
+      <outboundDataType>HL7V2</outboundDataType>
+    </transformer>
+    <filter version="3.12.0">
+      <elements>
+        <com.mirth.connect.plugins.rulebuilder.RuleBuilderRule version="3.12.0">
+          <name>ADT or ORU</name>
+          <sequenceNumber>0</sequenceNumber>
+          <enabled>true</enabled>
+          <operator>NONE</operator>
+          <field>msg['MSH']['MSH.9']['MSH.9.1'].toString()</field>
+          <condition>EQUALS</condition>
+          <values>
+            <string>'ADT'</string>
+            <string>'ORU'</string>
+          </values>
+        </com.mirth.connect.plugins.rulebuilder.RuleBuilderRule>
+        <com.mirth.connect.plugins.rulebuilder.RuleBuilderRule version="3.12.0">
+          <name>Has a patient id</name>
+          <sequenceNumber>1</sequenceNumber>
+          <enabled>true</enabled>
+          <operator>AND</operator>
+          <field>msg['PID']['PID.3']['PID.3.1'].toString()</field>
+          <condition>EXISTS</condition>
+          <values/>
+        </com.mirth.connect.plugins.rulebuilder.RuleBuilderRule>
+        <com.mirth.connect.plugins.rulebuilder.RuleBuilderRule version="3.12.0">
+          <name>Not a test system</name>
+          <sequenceNumber>2</sequenceNumber>
+          <enabled>true</enabled>
+          <operator>AND</operator>
+          <field>msg['MSH']['MSH.3']['MSH.3.1'].toString()</field>
+          <condition>NOT_CONTAIN</condition>
+          <values>
+            <string>'TEST'</string>
+          </values>
+        </com.mirth.connect.plugins.rulebuilder.RuleBuilderRule>
+      </elements>
+    </filter>
+    <transportName>TCP Listener</transportName>
+    <mode>SOURCE</mode>
+    <enabled>true</enabled>
+    <waitForPrevious>true</waitForPrevious>
+  </sourceConnector>
+  <destinationConnectors>
+    <connector version="3.12.0">
+      <metaDataId>1</metaDataId>
+      <name>Archive</name>
+      <properties class="com.mirth.connect.connectors.file.FileDispatcherProperties" version="3.12.0">
+        <pluginProperties/>
+        <destinationConnectorProperties version="3.12.0">
+          <queueEnabled>true</queueEnabled>
+          <sendFirst>false</sendFirst>
+          <retryIntervalMillis>5000</retryIntervalMillis>
+          <regenerateTemplate>false</regenerateTemplate>
+          <retryCount>0</retryCount>
+          <rotate>false</rotate>
+          <includeFilterTransformer>false</includeFilterTransformer>
+          <threadCount>1</threadCount>
+          <threadAssignmentVariable></threadAssignmentVariable>
+          <validateResponse>false</validateResponse>
+          <queueBufferSize>1000</queueBufferSize>
+          <reattachAttachments>true</reattachAttachments>
+        </destinationConnectorProperties>
+        <scheme>FILE</scheme>
+        <schemeProperties class="com.mirth.connect.connectors.file.FileSchemeProperties"/>
+        <host>${archive_dir}</host>
+        <outputPattern>${message.messageId}.hl7</outputPattern>
+        <anonymous>true</anonymous>
+        <username>anonymous</username>
+        <password>anonymous</password>
+        <timeout>10000</timeout>
+        <keepConnectionOpen>true</keepConnectionOpen>
+        <maxIdleTime>0</maxIdleTime>
+        <secure>true</secure>
+        <passive>true</passive>
+        <validateConnection>true</validateConnection>
+        <outputAppend>false</outputAppend>
+        <errorOnExists>true</errorOnExists>
+        <temporary>false</temporary>
+        <binary>false</binary>
+        <charsetEncoding>DEFAULT_ENCODING</charsetEncoding>
+        <template>${message.encodedData}</template>
+      </properties>
+      <transformer version="3.12.0">
+        <elements/>
+        <inboundDataType>HL7V2</inboundDataType>
+        <outboundDataType>HL7V2</outboundDataType>
+      </transformer>
+      <responseTransformer version="3.12.0">
+        <elements/>
+        <inboundDataType>HL7V2</inboundDataType>
+        <outboundDataType>HL7V2</outboundDataType>
+      </responseTransformer>
+      <filter version="3.12.0">
+        <elements/>
+      </filter>
+      <transportName>File Writer</transportName>
+      <mode>DESTINATION</mode>
+      <enabled>true</enabled>
+      <waitForPrevious>true</waitForPrevious>
+    </connector>
+    <connector version="3.12.0">
+      <metaDataId>2</metaDataId>
+      <name>Old archive</name>
+      <properties class="com.mirth.connect.connectors.file.FileDispatcherProperties" version="3.12.0">
+        <scheme>FILE</scheme>
+        <host>/data/old-archive</host>
+        <outputPattern>${message.messageId}.hl7</outputPattern>
+      </properties>
+      <transportName>File Writer</transportName>
+      <mode>DESTINATION</mode>
+      <enabled>false</enabled>
+      <waitForPrevious>true</waitForPrevious>
+    </connector>
+  </destinationConnectors>
+  <preprocessingScript>// Modify the message variable below to pre process data
+return message;</preprocessingScript>
+  <postprocessingScript>// This script executes once after a message has been processed
+return;</postprocessingScript>
+  <deployScript>// This script executes once when the channel is deployed
+return;</deployScript>
+  <undeployScript>// This script executes once when the channel is undeployed
+return;</undeployScript>
+  <properties version="3.12.0">
+    <clearGlobalChannelMap>true</clearGlobalChannelMap>
+    <messageStorageMode>DEVELOPMENT</messageStorageMode>
+    <encryptData>false</encryptData>
+    <removeContentOnCompletion>false</removeContentOnCompletion>
+    <removeOnlyFilteredOnCompletion>false</removeOnlyFilteredOnCompletion>
+    <removeAttachmentsOnCompletion>false</removeAttachmentsOnCompletion>
+    <initialState>STARTED</initialState>
+    <storeAttachments>false</storeAttachments>
+    <metaDataColumns/>
+    <attachmentProperties version="3.12.0">
+      <type>None</type>
+      <properties/>
+    </attachmentProperties>
+  </properties>
+  <exportData>
+    <metadata>
+      <enabled>true</enabled>
+      <lastModified>
+        <time>1790000000000</time>
+        <timezone>UTC</timezone>
+      </lastModified>
+      <pruningSettings>
+        <archiveEnabled>true</archiveEnabled>
+      </pruningSettings>
+    </metadata>
+  </exportData>
+</channel>
