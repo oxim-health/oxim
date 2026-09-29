@@ -268,8 +268,8 @@ impl RetryPolicy {
     }
 }
 
-/// A duration written as text: `250ms`, `5s`, `2m`, `1h` or a combination
-/// such as `1m30s`.
+/// A duration written as text: `250ms`, `5s`, `2m`, `1h`, `90d` or a
+/// combination such as `1m30s`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct DurationText(pub Duration);
 
@@ -277,7 +277,8 @@ impl FromStr for DurationText {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, String> {
-        let invalid = || format!("invalid duration {s:?}; use values like 250ms, 5s, 2m or 1h");
+        let invalid =
+            || format!("invalid duration {s:?}; use values like 250ms, 5s, 2m, 1h or 90d");
         let mut total = Duration::ZERO;
         let mut rest = s.trim();
         if rest.is_empty() {
@@ -298,6 +299,8 @@ impl FromStr for DurationText {
                 (Duration::from_secs(60), 1)
             } else if rest.starts_with('h') {
                 (Duration::from_secs(3600), 1)
+            } else if rest.starts_with('d') {
+                (Duration::from_secs(86_400), 1)
             } else {
                 return Err(invalid());
             };
@@ -314,7 +317,9 @@ impl FromStr for DurationText {
 impl fmt::Display for DurationText {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let millis = self.0.as_millis();
-        if millis.is_multiple_of(3_600_000) && millis > 0 {
+        if millis.is_multiple_of(86_400_000) && millis > 0 {
+            write!(f, "{}d", millis / 86_400_000)
+        } else if millis.is_multiple_of(3_600_000) && millis > 0 {
             write!(f, "{}h", millis / 3_600_000)
         } else if millis.is_multiple_of(60_000) && millis > 0 {
             write!(f, "{}m", millis / 60_000)
@@ -511,13 +516,18 @@ destinations:
             ("2m", Duration::from_secs(120)),
             ("1h", Duration::from_secs(3600)),
             ("1m30s", Duration::from_secs(90)),
+            ("90d", Duration::from_secs(90 * 86_400)),
         ] {
             let parsed: DurationText = text.parse().unwrap();
             assert_eq!(parsed.0, duration);
         }
         assert_eq!(DurationText(Duration::from_secs(90)).to_string(), "90s");
         assert_eq!(DurationText(Duration::from_secs(120)).to_string(), "2m");
-        for bad in ["", "5", "s", "5 s", "5d", "-5s"] {
+        assert_eq!(
+            DurationText(Duration::from_secs(2 * 86_400)).to_string(),
+            "2d"
+        );
+        for bad in ["", "5", "s", "5 s", "5w", "-5s"] {
             assert!(bad.parse::<DurationText>().is_err(), "{bad}");
         }
     }
