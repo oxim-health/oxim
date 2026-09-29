@@ -12,6 +12,7 @@ cargo-fuzz = true
 libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
 oxim-hl7 = { path = "../crates/oxim-hl7" }
 oxim-mllp = { path = "../crates/oxim-mllp" }
+oxim-poct1a = { path = "../crates/oxim-poct1a" }
 
 # Not part of the main workspace: fuzzing needs a nightly toolchain.
 [workspace]
@@ -34,6 +35,20 @@ bench = false
 [[bin]]
 name = "mllp_decoder"
 path = "fuzz_targets/mllp_decoder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "poct1a_stream"
+path = "fuzz_targets/poct1a_stream.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "poct1a_message"
+path = "fuzz_targets/poct1a_message.rs"
 test = false
 doc = false
 bench = false
