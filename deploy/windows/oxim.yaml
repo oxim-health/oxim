@@ -1,0 +1,27 @@
+# OXIM engine configuration installed by the Windows installer in
+# %ProgramData%\OXIM. Relative paths are resolved against this file.
+
+# The message database (oxim.db) and the lab order cache (orders.db).
+data_dir: data
+
+# Channel files (*.yaml). Changes are picked up while OXIM runs.
+# Examples: %ProgramFiles%\OXIM\examples\channels
+channels_dir: channels
+
+# Code and routing tables referenced by channel steps.
+tables_dir: tables
+
+log:
+  level: info          # or e.g. "info,oxim_connectors=debug"; OXIM_LOG overrides
+  format: text         # text or json
+  directory: logs      # a service has no console: write daily log files
+
+retention:
+  contents_after: 90d  # delete message contents of completed messages
+  messages_after: 365d # delete completed messages entirely
+  orders_after: 90d    # delete cached lab orders not changed since
+  interval: 1h
+
+reload:
+  enabled: true
+  interval: 5s

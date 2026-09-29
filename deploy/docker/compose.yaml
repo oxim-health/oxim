@@ -1,0 +1,58 @@
+# OXIM demo: a simulated ASTM analyzer sends synthetic results to OXIM,
+# which translates the test codes and delivers HL7 v2 ORU^R01 messages to a
+# simulated LIS over MLLP, keeping a file archive on the data volume.
+#
+#   docker compose -f deploy/docker/compose.yaml up --build
+#
+# All data is synthetic. See docs/install/docker.md.
+name: oxim-demo
+
+x-build: &build
+  context: ../..
+  dockerfile: deploy/docker/Dockerfile
+
+services:
+  oxim:
+    build: *build
+    image: oxim:dev
+    volumes:
+      - ./demo/oxim.yaml:/etc/oxim/oxim.yaml:ro
+      - ./demo/channels:/etc/oxim/channels:ro
+      - ../examples/tables:/etc/oxim/tables:ro
+      - oxim-data:/var/lib/oxim
+    ports:
+      # Send your own ASTM messages from the host, for example with
+      # `oxim-sim astm send --to 127.0.0.1:5100`.
+      - "127.0.0.1:5100:5100"
+    depends_on:
+      - lis
+    restart: unless-stopped
+
+  # Plays the LIS: acknowledges every HL7 message and prints it.
+  lis:
+    build:
+      <<: *build
+      target: sim
+    image: oxim-sim:dev
+    command: ["mllp", "receive", "--listen", "0.0.0.0:2576"]
+    restart: unless-stopped
+
+  # Plays a chemistry analyzer: sends five result messages every 30 seconds.
+  analyzer:
+    build:
+      <<: *build
+      target: sim
+    image: oxim-sim:dev
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        while true; do
+        oxim-sim astm send --to oxim:5100 --count 5 --seed "$$(date +%s)" || true;
+        sleep 30;
+        done
+    depends_on:
+      - oxim
+    restart: unless-stopped
+
+volumes:
+  oxim-data:

@@ -1,0 +1,18 @@
+# Receive HL7 v2 over MLLP and archive every message as a file.
+# Copy this file to the channel directory without the .example suffix to
+# activate it.
+id: mllp-archive
+name: HL7 archive
+enabled: true
+source:
+  type: mllp
+  data_type: hl7v2
+  settings:
+    listen: 0.0.0.0:2575
+destinations:
+  - id: archive
+    type: file
+    settings:
+      # Relative paths are resolved against the working directory of the
+      # service: /var/lib/oxim on Linux, %ProgramData%\OXIM on Windows.
+      directory: archive

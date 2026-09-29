@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  OXIM Windows installer (WiX Toolset v4/v5 schema). Build it with
+  deploy/windows/build-msi.ps1, which supplies these variables:
+
+    Version     numeric product version, for example 1.0.0
+    BinDir      directory that holds oxim.exe
+    RepoDir     repository root (licenses, README, examples, configuration)
+    LicenseRtf  license text shown by the installer, generated from
+                LICENSE-MIT and LICENSE-APACHE
+
+  Layout:
+    %ProgramFiles%\OXIM\oxim.exe        program, added to the system PATH
+    %ProgramFiles%\OXIM\examples\       example channels and tables
+    %ProgramData%\OXIM\oxim.yaml        configuration (kept on upgrade and removal)
+    %ProgramData%\OXIM\channels\        channel files
+    %ProgramData%\OXIM\tables\          code and routing tables
+    %ProgramData%\OXIM\data\            message database (kept on removal)
+    %ProgramData%\OXIM\logs\            log files
+
+  The service "oxim" is registered exactly as `oxim service install` does:
+  automatic start, LocalSystem, `oxim.exe service run --config <file>`.
+  It is not started by the installer, so channels can be configured first.
+  %ProgramData%\OXIM is readable only by SYSTEM and Administrators because
+  it holds clinical messages and channel files that the service executes.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="OXIM"
+           Manufacturer="The OXIM Contributors"
+           Version="$(var.Version)"
+           UpgradeCode="521d6eaf-bf3f-4f83-96df-b29f889ad407"
+           Scope="perMachine"
+           Compressed="yes"
+           Language="1033">
+    <SummaryInformation Description="OXIM clinical integration engine" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/oxim-health/oxim" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/oxim-health/oxim/blob/main/docs/install/windows.md" />
+    <Property Id="ARPCOMMENTS" Value="Configuration and data in %ProgramData%\OXIM are kept when OXIM is removed." />
+
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="OXIM">
+        <Directory Id="EXAMPLESFOLDER" Name="examples">
+          <Directory Id="EXAMPLECHANNELSFOLDER" Name="channels" />
+          <Directory Id="EXAMPLETABLESFOLDER" Name="tables" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATAROOTFOLDER" Name="OXIM">
+        <Directory Id="DATAFOLDER" Name="data" />
+        <Directory Id="CHANNELSFOLDER" Name="channels" />
+        <Directory Id="TABLESFOLDER" Name="tables" />
+        <Directory Id="LOGSFOLDER" Name="logs" />
+      </Directory>
+    </StandardDirectory>
+
+    <ComponentGroup Id="Program" Directory="INSTALLFOLDER">
+      <Component Id="OximExecutable">
+        <File Id="OximExe" Source="$(var.BinDir)\oxim.exe" KeyPath="yes" />
+        <ServiceInstall Id="OximService"
+                        Name="oxim"
+                        DisplayName="OXIM Integration Engine"
+                        Description="Receives, transforms and delivers clinical messages between devices and systems."
+                        Type="ownProcess"
+                        Start="auto"
+                        ErrorControl="normal"
+                        Vital="yes"
+                        Arguments="service run --config &quot;[DATAROOTFOLDER]oxim.yaml&quot;" />
+        <ServiceControl Id="OximService" Name="oxim" Stop="both" Remove="uninstall" Wait="yes" />
+        <Environment Id="SystemPath"
+                     Name="PATH"
+                     Value="[INSTALLFOLDER]"
+                     Action="set"
+                     Part="last"
+                     System="yes"
+                     Permanent="no" />
+      </Component>
+      <Component Id="LicenseMit">
+        <File Id="LicenseMit" Source="$(var.RepoDir)\LICENSE-MIT" KeyPath="yes" />
+      </Component>
+      <Component Id="LicenseApache">
+        <File Id="LicenseApache" Source="$(var.RepoDir)\LICENSE-APACHE" KeyPath="yes" />
+      </Component>
+      <Component Id="Readme">
+        <File Id="Readme" Source="$(var.RepoDir)\README.md" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="Examples">
+      <Component Id="ExampleMllpArchive" Directory="EXAMPLECHANNELSFOLDER">
+        <File Id="ExampleMllpArchive" Source="$(var.RepoDir)\deploy\examples\channels\mllp-archive.yaml.example" KeyPath="yes" />
+      </Component>
+      <Component Id="ExampleAnalyzerToLis" Directory="EXAMPLECHANNELSFOLDER">
+        <File Id="ExampleAnalyzerToLis" Source="$(var.RepoDir)\deploy\examples\channels\analyzer-to-lis.yaml.example" KeyPath="yes" />
+      </Component>
+      <Component Id="ExampleHostQuery" Directory="EXAMPLECHANNELSFOLDER">
+        <File Id="ExampleHostQuery" Source="$(var.RepoDir)\deploy\examples\channels\host-query.yaml.example" KeyPath="yes" />
+      </Component>
+      <Component Id="ExampleAnalyzerCodes" Directory="EXAMPLETABLESFOLDER">
+        <File Id="ExampleAnalyzerCodes" Source="$(var.RepoDir)\deploy\examples\tables\analyzer-codes.csv" KeyPath="yes" />
+      </Component>
+      <Component Id="ExampleRouting" Directory="EXAMPLETABLESFOLDER">
+        <File Id="ExampleRouting" Source="$(var.RepoDir)\deploy\examples\tables\routing.csv" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Everything below is permanent: removing OXIM keeps configuration,
+         channels, tables, messages and logs. -->
+    <ComponentGroup Id="Configuration">
+      <Component Id="DataRootFolder" Directory="DATAROOTFOLDER" Guid="5404036a-b020-4435-b50a-f2b6e7096289" Permanent="yes">
+        <CreateFolder>
+          <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+        </CreateFolder>
+      </Component>
+      <Component Id="ConfigurationFile" Directory="DATAROOTFOLDER" Permanent="yes" NeverOverwrite="yes">
+        <File Id="OximYaml" Name="oxim.yaml" Source="$(var.RepoDir)\deploy\windows\oxim.yaml" KeyPath="yes">
+          <PermissionEx Sddl="D:PAI(A;;FA;;;SY)(A;;FA;;;BA)" />
+        </File>
+      </Component>
+      <Component Id="DataFolder" Directory="DATAFOLDER" Guid="02029fd5-d5db-49e9-bbfa-d1b63840d39d" Permanent="yes">
+        <CreateFolder>
+          <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+        </CreateFolder>
+      </Component>
+      <Component Id="ChannelsFolder" Directory="CHANNELSFOLDER" Guid="ce5ad63b-56f0-4998-b8c4-55e39c41f1ad" Permanent="yes">
+        <CreateFolder>
+          <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+        </CreateFolder>
+      </Component>
+      <Component Id="TablesFolder" Directory="TABLESFOLDER" Guid="4711689c-e9c4-4950-a9ec-4269816ca9e9" Permanent="yes">
+        <CreateFolder>
+          <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+        </CreateFolder>
+      </Component>
+      <Component Id="LogsFolder" Directory="LOGSFOLDER" Guid="1a337d97-3558-4c84-9f70-9f6649540b7a" Permanent="yes">
+        <CreateFolder>
+          <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+        </CreateFolder>
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="OXIM" Level="1" AllowAbsent="no">
+      <ComponentGroupRef Id="Program" />
+      <ComponentGroupRef Id="Examples" />
+      <ComponentGroupRef Id="Configuration" />
+    </Feature>
+  </Package>
+</Wix>
