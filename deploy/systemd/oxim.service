@@ -1,0 +1,21 @@
+[Unit]
+Description=OXIM Integration Engine
+Documentation=https://github.com/oxim-health/oxim
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=oxim
+Group=oxim
+ExecStart=/usr/bin/oxim run --config /etc/oxim/oxim.yaml
+Restart=on-failure
+RestartSec=5
+# Allow in-flight deliveries to finish before systemd kills the process.
+TimeoutStopSec=60
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

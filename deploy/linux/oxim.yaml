@@ -1,0 +1,28 @@
+# OXIM engine configuration for Linux packages (deb, rpm, offline bundle).
+# Relative paths are resolved against this file; the packaged layout uses
+# absolute paths. See /usr/share/doc/oxim/install/linux.md.
+
+# The message database (oxim.db) and the lab order cache (orders.db).
+data_dir: /var/lib/oxim
+
+# Channel files (*.yaml). Changes are picked up while OXIM runs.
+# Examples: /usr/share/doc/oxim/examples/channels
+channels_dir: /etc/oxim/channels
+
+# Code and routing tables referenced by channel steps.
+tables_dir: /etc/oxim/tables
+
+log:
+  level: info          # or e.g. "info,oxim_connectors=debug"; OXIM_LOG overrides
+  format: text         # text or json; standard output goes to the journal
+  # directory: /var/log/oxim   # write daily files instead
+
+retention:
+  contents_after: 90d  # delete message contents of completed messages
+  messages_after: 365d # delete completed messages entirely
+  orders_after: 90d    # delete cached lab orders not changed since
+  interval: 1h
+
+reload:
+  enabled: true
+  interval: 5s

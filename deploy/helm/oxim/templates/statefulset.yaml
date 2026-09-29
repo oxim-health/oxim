@@ -1,0 +1,151 @@
+{{- if ne (int .Values.replicaCount) 1 }}
+{{- fail "replicaCount must be 1: OXIM with SQLite is single-node; clustering needs the PostgreSQL backend" }}
+{{- end }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "oxim.fullname" . }}
+  labels:
+    {{- include "oxim.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ include "oxim.fullname" . }}-headless
+  selector:
+    matchLabels:
+      {{- include "oxim.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # oxim.yaml is read at startup; channel and table changes are picked
+        # up while running.
+        checksum/config: {{ include "oxim.config" . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "oxim.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "oxim.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: oxim
+          image: {{ include "oxim.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["run", "-c", "/etc/oxim/oxim.yaml"]
+          # Relative paths in channel files resolve on the data volume.
+          workingDir: /var/lib/oxim
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- with .Values.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            {{- range .Values.service.ports }}
+            - name: {{ .name }}
+              containerPort: {{ default .port .targetPort }}
+              protocol: {{ default "TCP" .protocol }}
+            {{- end }}
+          {{- if .Values.probes.port }}
+          startupProbe:
+            tcpSocket:
+              port: {{ .Values.probes.port }}
+            {{- toYaml .Values.probes.startup | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.probes.port }}
+            {{- toYaml .Values.probes.liveness | nindent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.probes.port }}
+            {{- toYaml .Values.probes.readiness | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/oxim/oxim.yaml
+              subPath: oxim.yaml
+              readOnly: true
+            - name: channels
+              mountPath: /etc/oxim/channels
+              readOnly: true
+            - name: tables
+              mountPath: /etc/oxim/tables
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/oxim
+            - name: tmp
+              mountPath: /tmp
+            {{- if or .Values.secret.create .Values.secret.existingSecret }}
+            - name: secrets
+              mountPath: /etc/oxim/secrets
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "oxim.fullname" . }}-config
+        - name: channels
+          configMap:
+            name: {{ include "oxim.fullname" . }}-channels
+        - name: tables
+          configMap:
+            name: {{ include "oxim.fullname" . }}-tables
+        - name: tmp
+          emptyDir: {}
+        {{- if or .Values.secret.create .Values.secret.existingSecret }}
+        - name: secrets
+          secret:
+            secretName: {{ include "oxim.secretName" . }}
+        {{- end }}
+        {{- if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        {{- with .Values.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        {{- if .Values.persistence.storageClass }}
+        storageClassName: {{ .Values.persistence.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+  {{- end }}

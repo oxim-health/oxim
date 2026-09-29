@@ -1,0 +1,20 @@
+#!/bin/sh
+# Debian prerm for OXIM: stops the service before removal. Upgrades keep it
+# running; postinst restarts it with the new version.
+set -e
+
+case "$1" in
+    remove|deconfigure)
+        if [ -d /run/systemd/system ]; then
+            systemctl stop oxim.service >/dev/null || true
+        fi
+        ;;
+    upgrade|failed-upgrade)
+        ;;
+    *)
+        echo "prerm called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

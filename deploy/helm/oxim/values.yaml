@@ -1,0 +1,147 @@
+# Default values for the OXIM chart. See docs/install/kubernetes.md.
+
+# -- Number of pods. OXIM with its SQLite store is a single-node engine, so
+# this must stay 1; the chart refuses other values. Clustering and high
+# availability need the PostgreSQL backend.
+replicaCount: 1
+
+image:
+  repository: ghcr.io/oxim-health/oxim
+  # -- Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  # -- Defaults to the release's full name.
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+# -- The engine configuration, written to /etc/oxim/oxim.yaml (see
+# crates/oxim/README.md). The chart sets data_dir, channels_dir and
+# tables_dir itself. Changing it restarts the pod.
+config:
+  log:
+    level: info
+    # -- json suits log collectors; text is easier to read.
+    format: json
+  retention:
+    contents_after: 90d
+    messages_after: 365d
+    orders_after: 90d
+    interval: 1h
+  reload:
+    enabled: true
+    interval: 5s
+
+# -- Channel files, mounted in /etc/oxim/channels. Keys are file names ending
+# in .yaml. Changes are picked up by the running engine without a restart
+# (after the kubelet refreshes the volume, usually within a minute).
+channels:
+  mllp-archive.yaml: |
+    # Receive HL7 v2 over MLLP and archive every message on the data volume.
+    id: mllp-archive
+    name: HL7 archive
+    source:
+      type: mllp
+      data_type: hl7v2
+      settings:
+        listen: 0.0.0.0:2575
+    destinations:
+      - id: archive
+        type: file
+        settings:
+          directory: archive
+
+# -- Code and routing tables, mounted in /etc/oxim/tables. Keys are file
+# names, for example analyzer-codes.csv.
+tables: {}
+
+# Credentials for connectors, mounted read-only in /etc/oxim/secrets.
+secret:
+  # -- Create a Secret from stringData.
+  create: false
+  stringData: {}
+  # -- Use an existing Secret instead.
+  existingSecret: ""
+
+service:
+  type: ClusterIP
+  annotations: {}
+  # -- One entry per listener that channels open. port is the Service port,
+  # targetPort the port the channel listens on (defaults to port).
+  ports:
+    - name: mllp
+      port: 2575
+      protocol: TCP
+    # - name: astm
+    #   port: 5100
+    # - name: poct
+    #   port: 7000
+  # -- For LoadBalancer services: keep client addresses visible to OXIM.
+  externalTrafficPolicy: ""
+
+persistence:
+  # -- Without persistence messages are lost when the pod is deleted.
+  enabled: true
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  annotations: {}
+
+probes:
+  # -- Name of the listener port (from service.ports) whose TCP connect
+  # proves the engine is running. Empty disables the probes.
+  port: mllp
+  startup:
+    periodSeconds: 5
+    failureThreshold: 30
+  liveness:
+    periodSeconds: 20
+    failureThreshold: 3
+  readiness:
+    periodSeconds: 10
+    failureThreshold: 3
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+# -- Longer than the engine's shutdown grace (engine.shutdown_grace), so
+# in-flight deliveries finish before the pod is killed.
+terminationGracePeriodSeconds: 75
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

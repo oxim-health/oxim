@@ -1,0 +1,22 @@
+OXIM {{ .Chart.AppVersion }} is running as {{ include "oxim.fullname" . }} in namespace {{ .Release.Namespace }}.
+
+Channels: {{ len .Values.channels }} file(s) in /etc/oxim/channels. Edit the `channels`
+value and run `helm upgrade`; the engine redeploys changed channels without a
+restart.
+
+Listeners:
+{{- range .Values.service.ports }}
+  {{ .name }}: {{ include "oxim.fullname" $ }}.{{ $.Release.Namespace }}.svc:{{ .port }}
+{{- end }}
+
+Check the channels and watch the log:
+  kubectl -n {{ .Release.Namespace }} exec {{ include "oxim.fullname" . }}-0 -- oxim -c /etc/oxim/oxim.yaml validate
+  kubectl -n {{ .Release.Namespace }} logs -f {{ include "oxim.fullname" . }}-0
+
+This chart runs one pod with an SQLite store on a persistent volume. Do not
+scale it: clustering and high availability need the PostgreSQL backend.
+{{- if not .Values.persistence.enabled }}
+
+WARNING: persistence is disabled. Queued and stored messages are lost when
+the pod is deleted.
+{{- end }}

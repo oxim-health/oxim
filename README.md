@@ -40,9 +40,15 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-dicom`](crates/oxim-dicom) | DICOM routing: Storage SCP/SCU, DICOMweb STOW-RS, attribute filters and editing, PS3.15 de-identification |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |
+| [`docs/install`](docs/install/README.md) | Installation guides: Linux, Windows, Docker, Kubernetes and offline |
+| [`deploy`](deploy) | Deployment artifacts: Dockerfile, Helm chart, systemd units, deb/rpm scripts, WiX installer, offline bundle builder |
 | [`fuzz`](fuzz) | Fuzz targets (cargo-fuzz) |
 
 The full crate map is described in [section 14 of the specification](docs/SPEC.md#14-architecture).
+
+## Installing
+
+Packages (deb, rpm, MSI), container images, a Helm chart and offline bundles for air-gapped networks are described in the [installation guides](docs/install/README.md).
 
 ## Building
 

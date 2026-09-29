@@ -1,0 +1,32 @@
+# Demo channel: results from the simulated analyzer (ASTM over TCP) are
+# normalized, their test codes translated with tables/analyzer-codes.csv and
+# delivered to the simulated LIS as HL7 v2 ORU^R01 over MLLP. Every message
+# is also archived to /var/lib/oxim/archive.
+id: analyzer-to-lis
+name: Demo analyzer to LIS
+enabled: true
+source:
+  type: astm-tcp
+  data_type: astm
+  normalize: true
+  settings:
+    listen: 0.0.0.0:5100
+transformers:
+  - type: map-observations
+    table: analyzer-codes.csv
+    on_missing: keep
+destinations:
+  - id: lis
+    type: mllp
+    filters:
+      - {type: clinical-kind, kinds: [results, quality_control]}
+    encoder:
+      type: hl7v2-oru-r01
+      sending_application: OXIM
+      receiving_application: DEMO-LIS
+    settings:
+      target: lis:2576
+  - id: archive
+    type: file
+    settings:
+      directory: archive

@@ -1,0 +1,27 @@
+# Answer an ASTM analyzer's host queries from the order cache, and forward
+# its results. Orders reach the cache through a channel with the
+# cache-orders step (see the oxim-lab documentation).
+# Needs tables/routing.csv in the tables directory.
+id: analyzer-host-query
+name: Analyzer host queries
+enabled: true
+source:
+  type: astm-tcp
+  data_type: astm
+  normalize: true
+  response:
+    mode: pipeline
+    encoder: {type: astm-query-response, sender: OXIM}
+  settings:
+    listen: 0.0.0.0:5101
+transformers:
+  - {type: answer-query, device: chem-1, routing: routing.csv}
+  - {type: record-results, device: chem-1}
+destinations:
+  - id: lis
+    type: mllp
+    filters:
+      - {type: clinical-kind, kinds: [results, quality_control]}
+    encoder: {type: hl7v2-oru-r01, sending_application: OXIM}
+    settings:
+      target: lis.example.internal:2576

@@ -1,0 +1,41 @@
+#!/bin/sh
+# Debian postrm for OXIM.
+#
+# Purging removes the service registration but keeps the message database,
+# logs, channel files and the oxim account: the database holds clinical
+# messages that retention rules or local policy may still require. Set
+# OXIM_PURGE_DATA=yes to delete /var/lib/oxim, /var/log/oxim and /etc/oxim
+# as well, for example: sudo OXIM_PURGE_DATA=yes apt purge oxim
+set -e
+
+case "$1" in
+    remove)
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload >/dev/null || true
+        fi
+        # Keeps the service disabled if the package is reinstalled before a
+        # purge, as debhelper does.
+        if command -v deb-systemd-helper >/dev/null 2>&1; then
+            deb-systemd-helper mask oxim.service >/dev/null || true
+        fi
+        ;;
+    purge)
+        if command -v deb-systemd-helper >/dev/null 2>&1; then
+            deb-systemd-helper purge oxim.service >/dev/null || true
+            deb-systemd-helper unmask oxim.service >/dev/null || true
+        fi
+        if [ "${OXIM_PURGE_DATA:-no}" = "yes" ]; then
+            rm -rf /var/lib/oxim /var/log/oxim /etc/oxim
+        else
+            echo "Kept /var/lib/oxim, /var/log/oxim and /etc/oxim (set OXIM_PURGE_DATA=yes to delete them)."
+        fi
+        ;;
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+    *)
+        echo "postrm called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0
