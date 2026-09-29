@@ -22,6 +22,7 @@
 //! [`SqliteStore`] is the single-node implementation. Clustered deployments
 //! use a PostgreSQL implementation of the same trait.
 
+pub mod cipher;
 mod error;
 mod schema;
 mod sqlite;
@@ -137,6 +138,15 @@ pub trait MessageStore: Send {
 
     /// Appends an event to the audit trail.
     fn record_audit(&mut self, event: &AuditEvent) -> StoreResult<()>;
+
+    /// Takes over the work of another cluster node that stopped: its
+    /// in-flight deliveries return to their queues and its received but
+    /// unprocessed messages are returned for processing here. Stores that
+    /// serve a single node have nothing to adopt.
+    fn adopt_node(&mut self, node: &str, now: Timestamp) -> StoreResult<RecoveryReport> {
+        let _ = (node, now);
+        Ok(RecoveryReport::default())
+    }
 
     /// Adds or replaces one content of a processed message, for content
     /// produced after processing, such as a reply relayed from a
