@@ -76,6 +76,8 @@ pub(crate) struct Globals {
     pub(crate) overrides: BTreeMap<String, String>,
     /// The location of the configuration map, when the export has one.
     pub(crate) configuration_location: Option<String>,
+    /// OXIM channel identifiers by Mirth channel id.
+    pub(crate) channel_ids: BTreeMap<String, String>,
 }
 
 static FUNCTION: LazyLock<Option<Regex>> =

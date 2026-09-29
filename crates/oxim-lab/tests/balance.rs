@@ -99,7 +99,10 @@ fn assigned(balance: Option<&str>) -> Vec<String> {
         let mut message = context(order(specimen, &["GLU", "HGB"]), n as u64);
         step.apply(&mut message).unwrap();
         devices.push(device_of(&cache, specimen, "GLU").unwrap());
-        assert_eq!(device_of(&cache, specimen, "HGB").as_deref(), Some("hema-1"));
+        assert_eq!(
+            device_of(&cache, specimen, "HGB").as_deref(),
+            Some("hema-1")
+        );
     }
     devices
 }
@@ -186,7 +189,10 @@ fn worklists_follow_the_assignment_and_queries_reassign() {
 fn balance_needs_routing() {
     let (environment, _) = environment();
     let error = CacheOrders::from_step(
-        &step("cache-orders", serde_json::json!({"balance": "round_robin"})),
+        &step(
+            "cache-orders",
+            serde_json::json!({"balance": "round_robin"}),
+        ),
         &environment,
     )
     .unwrap_err();

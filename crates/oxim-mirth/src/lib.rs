@@ -38,7 +38,9 @@
 //! | TCP Sender, MLLP / basic TCP | `mllp` / `tcp` destination (`target`) |
 //! | File Reader / File Writer (local files) | `file` source / destination |
 //! | HTTP Sender (POST, PUT) | `http` destination |
-//! | Other connectors (database, JavaScript, channel reader/writer, SMTP, JMS, DICOM, web service, document writer, FTP/SFTP/SMB/S3 files, HTTP listener) | reported unsupported; a channel whose source is unsupported is written as a `.yaml.draft` |
+//! | HTTP Listener | `http` source |
+//! | Channel Reader / Channel Writer | `channel` source / destination |
+//! | Other connectors (database, JavaScript, SMTP, JMS, DICOM, web service, document writer, FTP/SFTP/SMB/S3 files) | reported unsupported; a channel whose source is unsupported is written as a `.yaml.draft` |
 //! | Data types HL7V2, XML, JSON, RAW, DELIMITED (and fixed width) | `hl7v2`, `xml`, `json`, `raw`, `delimited` / `fixed_width` with `source.format` |
 //! | Data types HL7V3, EDI/X12, NCPDP, DICOM | `xml`, `x12`, `ncpdp`, `dicom` (reported) |
 //! | Rule builder rules on HL7 v2 fields | `path-equals`, `path-in`, `path-exists` or `condition` filters |
@@ -289,9 +291,10 @@ pub fn import(xml: &str, options: &ImportOptions) -> Result<ImportResult, MirthE
         globals.collect(&library);
     }
     let mut items = Vec::new();
-    server_items(&root, &globals, &mut Notes::new(None, &mut items, &globals));
     let mut found = Vec::new();
     channels(&root, &mut found);
+    globals.channel_ids = channel::planned_ids(&found, options);
+    server_items(&root, &globals, &mut Notes::new(None, &mut items, &globals));
     let mut ids = Names::default();
     let mut imported = Vec::new();
     for channel in found {

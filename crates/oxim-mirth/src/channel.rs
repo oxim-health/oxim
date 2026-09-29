@@ -453,6 +453,37 @@ fn property_notes(channel: &Element, notes: &mut Notes<'_>) -> bool {
     starts
 }
 
+/// Whether the channel is enabled in Mirth.
+pub(crate) fn enabled_in_mirth(channel: &Element) -> bool {
+    channel
+        .find(&["exportData", "metadata"])
+        .and_then(|m| m.flag("enabled"))
+        .or_else(|| channel.flag("enabled"))
+        .unwrap_or(true)
+}
+
+/// The OXIM identifiers the channels of an export will get, by Mirth
+/// channel id, so Channel Writers can name their target. Mirrors the
+/// assignment in [`convert`].
+pub(crate) fn planned_ids(
+    channels: &[&Element],
+    options: &ImportOptions,
+) -> std::collections::BTreeMap<String, String> {
+    let mut ids = Names::default();
+    let mut planned = std::collections::BTreeMap::new();
+    for channel in channels {
+        if !enabled_in_mirth(channel) && !options.include_disabled {
+            continue;
+        }
+        let name = channel.value("name").unwrap_or("unnamed channel");
+        let id = ids.unique(&slug(name, "channel"));
+        if let Some(mirth_id) = channel.value("id") {
+            planned.insert(mirth_id.to_owned(), id);
+        }
+    }
+    planned
+}
+
 /// Converts one channel. Returns `None` for a disabled channel that the
 /// options skip.
 pub(crate) fn convert(
@@ -467,11 +498,7 @@ pub(crate) fn convert(
         .unwrap_or("unnamed channel")
         .to_owned();
     let mirth_id = channel.value("id").map(str::to_owned);
-    let enabled_in_mirth = channel
-        .find(&["exportData", "metadata"])
-        .and_then(|m| m.flag("enabled"))
-        .or_else(|| channel.flag("enabled"))
-        .unwrap_or(true);
+    let enabled_in_mirth = enabled_in_mirth(channel);
     if !enabled_in_mirth && !options.include_disabled {
         items.push(ReportItem {
             channel: None,

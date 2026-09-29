@@ -1,5 +1,5 @@
 # Imported from Mirth Connect channel "Lab Feed" (0d2e4c1a-5b6f-4a7e-9c8d-300000000002) by oxim-mirth.
-# Migration report: 9 converted, 3 approximated, 1 unsupported item(s).
+# Migration report: 11 converted, 3 approximated, 0 unsupported item(s).
 
 id: lab-feed-2
 name: Lab Feed
@@ -12,6 +12,15 @@ filters:
   - {path: MSH-3.1, matches: "HEMA|CBC\\."}
 destinations:
 - id: destination-1
+  type: channel
+  queue:
+    retry:
+      initial_delay: "10s"
+      max_delay: "10s"
+      multiplier: 1
+      max_attempts: 1
+  settings: {channel: warehouse-import}
+- id: destination-1-2
   type: tcp
   queue:
     retry:
@@ -20,7 +29,7 @@ destinations:
       multiplier: 1
       max_attempts: 3
   settings: {target: "10.0.0.30:9100", framing: {mode: none}}
-- id: destination-1-2
+- id: destination-1-3
   type: file
   queue:
     retry:

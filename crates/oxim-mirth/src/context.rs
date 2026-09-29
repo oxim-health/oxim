@@ -99,6 +99,11 @@ impl<'a> Notes<'a> {
         resolved
     }
 
+    /// The OXIM identifier of an imported channel, by its Mirth id.
+    pub(crate) fn channel_id(&self, mirth_id: &str) -> Option<String> {
+        self.globals.channel_ids.get(mirth_id).cloned()
+    }
+
     /// The number of unsupported items reported so far for this channel.
     pub(crate) fn outcomes(&self, outcome: Outcome) -> usize {
         self.items
