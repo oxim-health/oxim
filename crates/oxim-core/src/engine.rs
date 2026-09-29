@@ -55,6 +55,8 @@ struct Running {
     config: ChannelConfig,
     cancel: CancellationToken,
     tasks: JoinSet<()>,
+    jobs: mpsc::Sender<Job>,
+    notifiers: Arc<BTreeMap<ConnectorId, Arc<Notify>>>,
 }
 
 struct Inner {
@@ -248,7 +250,7 @@ impl Engine {
         tasks.spawn(requeue_unprocessed(
             channel.clone(),
             inner.store.clone(),
-            jobs,
+            jobs.clone(),
             now,
             cancel.clone(),
         ));
@@ -260,8 +262,48 @@ impl Engine {
                 config,
                 cancel,
                 tasks,
+                jobs,
+                notifiers,
             },
         );
+        Ok(())
+    }
+
+    /// Schedules a stored message of a deployed channel for processing, for
+    /// example after [`MessageStore::reprocess`] reset it. Messages that are
+    /// not waiting for processing are skipped by the processor.
+    pub async fn process_stored(
+        &self,
+        channel: &ChannelId,
+        id: MessageId,
+    ) -> Result<(), EngineError> {
+        let jobs = self
+            .inner
+            .channels
+            .lock()
+            .await
+            .get(channel)
+            .map(|running| running.jobs.clone())
+            .ok_or_else(|| EngineError::NotDeployed(channel.clone()))?;
+        jobs.send(Job::Stored(id))
+            .await
+            .map_err(|_| EngineError::ShuttingDown)
+    }
+
+    /// Wakes the delivery worker of a destination so it checks its queue
+    /// now, for example after a delivery was requeued.
+    pub async fn wake_destination(
+        &self,
+        channel: &ChannelId,
+        destination: &ConnectorId,
+    ) -> Result<(), EngineError> {
+        let channels = self.inner.channels.lock().await;
+        let running = channels
+            .get(channel)
+            .ok_or_else(|| EngineError::NotDeployed(channel.clone()))?;
+        if let Some(notify) = running.notifiers.get(destination) {
+            notify.notify_one();
+        }
         Ok(())
     }
 

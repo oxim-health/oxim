@@ -1,5 +1,6 @@
 //! The engine configuration file, `oxim.yaml`.
 
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -34,6 +35,9 @@ pub(crate) struct Settings {
     /// Automatic redeployment of changed channel files.
     #[serde(default)]
     pub(crate) reload: ReloadSettings,
+    /// The web server: REST API, metrics and web UI.
+    #[serde(default)]
+    pub(crate) server: ServerSettings,
 }
 
 fn data_dir_default() -> PathBuf {
@@ -202,6 +206,71 @@ impl Default for ReloadSettings {
     }
 }
 
+/// The web server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ServerSettings {
+    /// Whether `oxim run` starts the web server. It only starts when at
+    /// least one user exists (`oxim users create-admin`).
+    #[serde(default = "server_enabled_default")]
+    pub(crate) enabled: bool,
+    /// Address and port to listen on. Only the local machine can connect
+    /// with the default; use `0.0.0.0:8443` with TLS for remote access.
+    #[serde(default = "listen_default")]
+    pub(crate) listen: SocketAddr,
+    /// Serve HTTPS with this certificate and key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) tls: Option<TlsSettings>,
+    /// Directory with the web UI's files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) ui_dir: Option<PathBuf>,
+    /// A session ends after this long without requests.
+    #[serde(default = "session_idle_default")]
+    pub(crate) session_idle: DurationText,
+    /// A session ends this long after login regardless of activity.
+    #[serde(default = "session_max_default")]
+    pub(crate) session_max: DurationText,
+}
+
+/// TLS certificate and key files (PEM).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TlsSettings {
+    /// Certificate chain, leaf first.
+    pub(crate) cert: PathBuf,
+    /// Private key.
+    pub(crate) key: PathBuf,
+}
+
+fn server_enabled_default() -> bool {
+    true
+}
+
+fn listen_default() -> SocketAddr {
+    SocketAddr::from(([127, 0, 0, 1], 8080))
+}
+
+fn session_idle_default() -> DurationText {
+    DurationText(Duration::from_secs(30 * 60))
+}
+
+fn session_max_default() -> DurationText {
+    DurationText(Duration::from_secs(12 * 3600))
+}
+
+impl Default for ServerSettings {
+    fn default() -> Self {
+        Self {
+            enabled: server_enabled_default(),
+            listen: listen_default(),
+            tls: None,
+            ui_dir: None,
+            session_idle: session_idle_default(),
+            session_max: session_max_default(),
+        }
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -212,6 +281,7 @@ impl Default for Settings {
             engine: EngineSettings::default(),
             retention: RetentionSettings::default(),
             reload: ReloadSettings::default(),
+            server: ServerSettings::default(),
         }
     }
 }
@@ -248,6 +318,13 @@ impl Settings {
         if let Some(directory) = &mut self.log.directory {
             resolve(directory);
         }
+        if let Some(tls) = &mut self.server.tls {
+            resolve(&mut tls.cert);
+            resolve(&mut tls.key);
+        }
+        if let Some(directory) = &mut self.server.ui_dir {
+            resolve(directory);
+        }
         self
     }
 
@@ -259,6 +336,11 @@ impl Settings {
     /// The lab order cache file.
     pub(crate) fn orders_path(&self) -> PathBuf {
         self.data_dir.join("orders.db")
+    }
+
+    /// The database of users, sessions and API tokens.
+    pub(crate) fn auth_database_path(&self) -> PathBuf {
+        self.data_dir.join("auth.db")
     }
 }
 
@@ -297,6 +379,26 @@ mod tests {
                 || settings.database_path().ends_with("data\\oxim.db")
         );
         assert!(settings.reload.enabled);
+        assert!(settings.server.enabled);
+        assert_eq!(settings.server.listen.to_string(), "127.0.0.1:8080");
+        assert_eq!(settings.server.session_idle.0, Duration::from_secs(1800));
+    }
+
+    #[test]
+    fn reads_server_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("oxim.yaml");
+        std::fs::write(
+            &path,
+            "server:\n  listen: 0.0.0.0:8443\n  tls: {cert: tls/cert.pem, key: tls/key.pem}\n  session_idle: 15m\n",
+        )
+        .unwrap();
+        let settings = Settings::load(&path).unwrap();
+        assert_eq!(settings.server.listen.port(), 8443);
+        let tls = settings.server.tls.unwrap();
+        assert!(tls.cert.is_absolute());
+        assert!(tls.key.ends_with("tls/key.pem") || tls.key.ends_with("tls\\key.pem"));
+        assert_eq!(settings.server.session_idle.0, Duration::from_secs(900));
     }
 
     #[test]

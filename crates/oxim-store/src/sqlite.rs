@@ -17,6 +17,7 @@ use crate::schema;
 use crate::types::{
     AuditEvent, Content, Delivery, DeliveryOutcome, DestinationState, MessageQuery, MessageRecord,
     Processed, PrunePolicy, PruneReport, QueueOrdering, QueueStats, RecoveryReport, Stage,
+    StatusCounts,
 };
 
 /// A message store in a single SQLite database file.
@@ -770,6 +771,52 @@ impl MessageStore for SqliteStore {
         }
         tx.commit()?;
         Ok(erased)
+    }
+
+    fn status_counts(&self) -> StoreResult<StatusCounts> {
+        let mut counts = StatusCounts::default();
+        let mut statement = self.conn.prepare_cached(
+            "SELECT channel, status, COUNT(*) FROM messages GROUP BY channel, status",
+        )?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        for (channel, status, count) in rows {
+            counts.messages.push((
+                parse("channel", &channel)?,
+                parse("status", &status)?,
+                u64::try_from(count).unwrap_or_default(),
+            ));
+        }
+        let mut statement = self.conn.prepare_cached(
+            "SELECT channel, destination, status, COUNT(*) FROM deliveries
+             GROUP BY channel, destination, status",
+        )?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        for (channel, destination, status, count) in rows {
+            counts.deliveries.push((
+                parse("channel", &channel)?,
+                parse("destination", &destination)?,
+                parse("delivery status", &status)?,
+                u64::try_from(count).unwrap_or_default(),
+            ));
+        }
+        Ok(counts)
     }
 
     fn record_audit(&mut self, event: &AuditEvent) -> StoreResult<()> {
