@@ -231,10 +231,13 @@ impl OrderCache {
         work(&mut conn)
     }
 
-    /// Files an order group. `New` and `Add` add tests that are not cached
-    /// yet (existing tests keep their status), `Replace` makes the open
-    /// tests exactly the given ones, and `Cancel` cancels the given tests
-    /// or, when none are given, every open test.
+    /// Files an order group. `New` adds tests that are not cached yet
+    /// (known tests keep their status, so a retransmitted order changes
+    /// nothing), `Add` does the same and also requests resulted tests again
+    /// (reruns and reflex tests), `Replace` makes the open tests exactly
+    /// the given ones, and `Cancel` cancels the given tests or, when none
+    /// are given, every open test. A cancelled test that is ordered again
+    /// is pending again.
     pub fn apply(&self, group: &OrderGroup, now: Timestamp) -> CacheResult<ApplyOutcome> {
         let specimen_id = specimen_id(group)
             .ok_or(CacheError::MissingSpecimen)?
@@ -290,18 +293,24 @@ impl OrderCache {
                             )?;
                         }
                     }
+                    // Reruns: `Add` requests resulted tests again.
+                    let reopen = if control == OrderControl::Add {
+                        "order_tests.status IN ('cancelled', 'resulted')"
+                    } else {
+                        "order_tests.status = 'cancelled'"
+                    };
+                    let upsert = format!(
+                        "INSERT INTO order_tests (specimen_id, code, test, status, device, updated_at)
+                         VALUES (?1, ?2, ?3, 'pending', NULL, ?4)
+                         ON CONFLICT (specimen_id, code) DO UPDATE SET
+                            status = 'pending',
+                            device = NULL,
+                            test = excluded.test,
+                            updated_at = excluded.updated_at
+                         WHERE {reopen}"
+                    );
                     for (code, test) in &codes {
-                        outcome.added += tx.execute(
-                            "INSERT INTO order_tests (specimen_id, code, test, status, device, updated_at)
-                             VALUES (?1, ?2, ?3, 'pending', NULL, ?4)
-                             ON CONFLICT (specimen_id, code) DO UPDATE SET
-                                status = 'pending',
-                                device = NULL,
-                                test = excluded.test,
-                                updated_at = excluded.updated_at
-                             WHERE order_tests.status = 'cancelled'",
-                            params![specimen_id, code, test, at],
-                        )?;
+                        outcome.added += tx.execute(&upsert, params![specimen_id, code, test, at])?;
                     }
                 }
                 OrderControl::Cancel => {
@@ -390,6 +399,43 @@ impl OrderCache {
                 received_at: Timestamp::from_unix_nanos(received_at),
                 updated_at: Timestamp::from_unix_nanos(updated_at),
             }))
+        })
+    }
+
+    /// Assigns an open test that has no device yet to `device` (load
+    /// balancing). Returns whether the test was assigned.
+    pub fn assign(
+        &self,
+        specimen_id: &str,
+        code: &str,
+        device: &str,
+        now: Timestamp,
+    ) -> CacheResult<bool> {
+        self.with(|conn| {
+            Ok(conn.execute(
+                "UPDATE order_tests SET device = ?3, updated_at = ?4
+                 WHERE specimen_id = ?1 AND code = ?2 AND device IS NULL
+                   AND status IN ('pending', 'sent')",
+                params![specimen_id, code, device, now.unix_nanos()],
+            )? > 0)
+        })
+    }
+
+    /// The number of open tests (pending or sent) assigned to each device.
+    pub fn open_tests_by_device(&self) -> CacheResult<std::collections::HashMap<String, u64>> {
+        self.with(|conn| {
+            let mut statement = conn.prepare_cached(
+                "SELECT device, COUNT(*) FROM order_tests
+                 WHERE device IS NOT NULL AND status IN ('pending', 'sent')
+                 GROUP BY device",
+            )?;
+            let counts = statement
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                })?
+                .map(|row| row.map(|(device, count)| (device, u64::try_from(count).unwrap_or(0))))
+                .collect::<Result<_, _>>()?;
+            Ok(counts)
         })
     }
 
@@ -527,13 +573,55 @@ mod tests {
         let order = cache.get("S1").unwrap().unwrap();
         assert_eq!(order.order.placer_id.as_deref(), Some("ORD1"));
         assert_eq!(order.patient.unwrap().identifiers[0].value, "P1");
-        let group = cache
+        let open = cache
             .get("S1")
             .unwrap()
             .unwrap()
             .to_group(|t| t.status.is_open());
-        assert_eq!(group.order.tests.len(), 1);
-        assert_eq!(group.order.specimen_ids, ["S1"]);
+        assert_eq!(open.order.tests.len(), 1);
+        assert_eq!(open.order.specimen_ids, ["S1"]);
+
+        // A retransmitted order leaves a resulted test alone; `Add` reruns it.
+        cache
+            .set_status("S1", &["K"], TestStatus::Resulted, None, at(8))
+            .unwrap();
+        cache
+            .apply(&group("S1", &["K"], OrderControl::New), at(9))
+            .unwrap();
+        assert_eq!(
+            statuses(&cache, "S1")[2],
+            ("K".into(), TestStatus::Resulted)
+        );
+        cache
+            .apply(&group("S1", &["K"], OrderControl::Add), at(10))
+            .unwrap();
+        assert_eq!(statuses(&cache, "S1")[2], ("K".into(), TestStatus::Pending));
+    }
+
+    #[test]
+    fn assigns_devices_and_counts_their_work() {
+        let cache = OrderCache::open_in_memory().unwrap();
+        cache
+            .apply(&group("S1", &["GLU", "CREA"], OrderControl::New), at(1))
+            .unwrap();
+        cache
+            .apply(&group("S2", &["GLU"], OrderControl::New), at(1))
+            .unwrap();
+        assert!(cache.assign("S1", "GLU", "chem-1", at(2)).unwrap());
+        assert!(cache.assign("S1", "CREA", "chem-1", at(2)).unwrap());
+        assert!(cache.assign("S2", "GLU", "chem-2", at(2)).unwrap());
+        // An assigned test keeps its device.
+        assert!(!cache.assign("S2", "GLU", "chem-1", at(3)).unwrap());
+        let counts = cache.open_tests_by_device().unwrap();
+        assert_eq!(counts.get("chem-1"), Some(&2));
+        assert_eq!(counts.get("chem-2"), Some(&1));
+        cache
+            .set_status("S1", &["GLU"], TestStatus::Resulted, None, at(4))
+            .unwrap();
+        assert_eq!(
+            cache.open_tests_by_device().unwrap().get("chem-1"),
+            Some(&1)
+        );
     }
 
     #[test]

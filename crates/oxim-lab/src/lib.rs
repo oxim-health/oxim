@@ -63,7 +63,7 @@ pub use cache::{
 };
 pub use environment::LabEnvironment;
 pub use routing::{Routing, RoutingError};
-pub use steps::{AnswerQuery, CacheOrders, HasTestsFor, RecordResults, SelectTests};
+pub use steps::{AnswerQuery, Balance, CacheOrders, HasTestsFor, RecordResults, SelectTests};
 
 /// Registers the lab steps with an engine registry.
 pub fn register(registry: &mut Registry, environment: LabEnvironment) {

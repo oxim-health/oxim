@@ -7,7 +7,7 @@ use oxim_core::{EngineError, Filter, MessageContext, StepConfig, StepError, Tran
 use oxim_model::{ClinicalContent, CodeableConcept, OrderControl, OrderGroup, ResultGroup};
 use tracing::{debug, warn};
 
-use crate::cache::{CacheError, CachedTest, TestStatus, specimen_id};
+use crate::cache::{CacheError, CachedOrder, CachedTest, OrderCache, TestStatus, specimen_id};
 use crate::environment::LabEnvironment;
 use crate::routing::Routing;
 
@@ -63,25 +63,141 @@ impl DeviceTests {
         })
     }
 
-    fn performs(&self, test: &CodeableConcept) -> bool {
+    /// Whether the device performs `test` for this tube: the device the
+    /// cache assigned it to (load balancing), or else any device the
+    /// routing table lists for it.
+    fn performs(&self, test: &CodeableConcept, cached: Option<&CachedOrder>) -> bool {
+        if let Some(order) = cached
+            && let Some(entry) = order
+                .tests
+                .iter()
+                .find(|entry| test.codings.iter().any(|coding| coding.code == entry.code))
+            && let Some(device) = &entry.device
+        {
+            return *device == self.device;
+        }
         self.routing.routes(test, &self.device)
+    }
+
+    fn cached(
+        &self,
+        group: &OrderGroup,
+        step: &'static str,
+    ) -> Result<Option<CachedOrder>, StepError> {
+        let Some(id) = specimen_id(group) else {
+            return Ok(None);
+        };
+        let cache = self.environment.cache().map_err(failure(step))?;
+        cache.get(id).map_err(failure(step))
     }
 
     /// Whether the device should see the group: it lists a test the device
     /// performs, or it lists no tests (such as "cancel the whole order") and
     /// the device performs one of the specimen's cached tests.
     fn concerns(&self, group: &OrderGroup, step: &'static str) -> Result<bool, StepError> {
+        let cached = self.cached(group, step)?;
         if !group.order.tests.is_empty() {
-            return Ok(group.order.tests.iter().any(|test| self.performs(test)));
+            return Ok(group
+                .order
+                .tests
+                .iter()
+                .any(|test| self.performs(test, cached.as_ref())));
         }
-        let Some(id) = specimen_id(group) else {
-            return Ok(false);
-        };
-        let cache = self.environment.cache().map_err(failure(step))?;
-        Ok(cache
-            .get(id)
-            .map_err(failure(step))?
-            .is_some_and(|order| order.tests.iter().any(|test| self.performs(&test.test))))
+        Ok(cached.as_ref().is_some_and(|order| {
+            order
+                .tests
+                .iter()
+                .any(|test| self.performs(&test.test, cached.as_ref()))
+        }))
+    }
+}
+
+/// How `cache-orders` chooses among several devices that perform a test.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Balance {
+    /// The first device listed for the test in the routing table.
+    #[default]
+    Primary,
+    /// The listed devices in turn, per test code.
+    RoundRobin,
+    /// The device with the fewest open tests in the cache.
+    LeastLoaded,
+}
+
+impl Balance {
+    fn parse(step: &StepConfig) -> Result<Self, EngineError> {
+        match optional_text(step, "balance")?.as_deref() {
+            None | Some("primary") => Ok(Self::Primary),
+            Some("round_robin") => Ok(Self::RoundRobin),
+            Some("least_loaded") => Ok(Self::LeastLoaded),
+            Some(other) => Err(EngineError::Config(format!(
+                "step {:?}: balance must be primary, round_robin or least_loaded, not {other:?}",
+                step.kind
+            ))),
+        }
+    }
+}
+
+/// Assigns open tests without a device to one of the devices that perform
+/// them.
+#[derive(Debug)]
+struct Assigner {
+    routing: Arc<Routing>,
+    balance: Balance,
+    turns: std::sync::Mutex<std::collections::HashMap<String, usize>>,
+}
+
+impl Assigner {
+    fn assign(
+        &self,
+        cache: &OrderCache,
+        order: &CachedOrder,
+        load: &mut Option<std::collections::HashMap<String, u64>>,
+        now: oxim_model::Timestamp,
+    ) -> Result<usize, CacheError> {
+        let mut assigned = 0;
+        for test in order
+            .tests
+            .iter()
+            .filter(|test| test.device.is_none() && test.status.is_open())
+        {
+            let devices = self.routing.devices(&test.test);
+            let chosen = match (self.balance, devices.as_slice()) {
+                (_, []) => continue,
+                (_, [only]) => *only,
+                (Balance::Primary, [first, ..]) => *first,
+                (Balance::RoundRobin, _) => {
+                    let mut turns = self.turns.lock().map_err(|_| CacheError::Unavailable)?;
+                    let turn = turns.entry(test.code.clone()).or_default();
+                    let chosen = devices[*turn % devices.len()];
+                    *turn = turn.wrapping_add(1);
+                    chosen
+                }
+                (Balance::LeastLoaded, _) => {
+                    if load.is_none() {
+                        *load = Some(cache.open_tests_by_device()?);
+                    }
+                    let counts = load.as_ref();
+                    let open =
+                        |device: &str| counts.and_then(|c| c.get(device)).copied().unwrap_or(0);
+                    // Ties go to the device listed first.
+                    let mut best = devices[0];
+                    for device in &devices[1..] {
+                        if open(device) < open(best) {
+                            best = device;
+                        }
+                    }
+                    best
+                }
+            };
+            if cache.assign(&order.specimen_id, &test.code, chosen, now)? {
+                assigned += 1;
+                if let Some(counts) = load.as_mut() {
+                    *counts.entry(chosen.to_owned()).or_default() += 1;
+                }
+            }
+        }
+        Ok(assigned)
     }
 }
 
@@ -93,24 +209,49 @@ const CACHE_ORDERS: &str = "cache-orders";
 /// transformers:
 ///   - type: cache-orders
 ///     require_specimen: false   # true: an order without a specimen ID is an error
+///     routing: routing.csv      # optional: assign each test to one device
+///     balance: least_loaded     # primary (default), round_robin or least_loaded
 /// ```
 ///
 /// Other content passes unchanged. Orders are filed by specimen identifier
 /// (see [`OrderCache::apply`](crate::OrderCache::apply)); an order without
 /// one cannot be matched to a tube and is skipped with a warning, or marks
 /// the message as errored with `require_specimen: true`.
-#[derive(Debug, Clone)]
+///
+/// With `routing`, each open test without a device is assigned to one of
+/// the devices that perform it ([`Balance`]); `select-tests` and
+/// `has-tests-for` then send it to that device only. Without `routing`,
+/// every device that performs a test receives it. A device that asks for a
+/// tube in a host query is offered every test it can perform, whatever the
+/// assignment, since the tube is in front of it.
+#[derive(Debug)]
 pub struct CacheOrders {
     environment: LabEnvironment,
     require_specimen: bool,
+    assigner: Option<Assigner>,
 }
 
 impl CacheOrders {
     /// Builds the step from its configuration.
     pub fn from_step(step: &StepConfig, environment: &LabEnvironment) -> Result<Self, EngineError> {
+        let balance = Balance::parse(step)?;
+        let assigner = optional_text(step, "routing")?
+            .map(|name| environment.routing(&name))
+            .transpose()?
+            .map(|routing| Assigner {
+                routing,
+                balance,
+                turns: std::sync::Mutex::new(std::collections::HashMap::new()),
+            });
+        if assigner.is_none() && step.settings.contains_key("balance") {
+            return Err(EngineError::Config(format!(
+                "step {CACHE_ORDERS:?}: \"balance\" needs \"routing\""
+            )));
+        }
         Ok(Self {
             environment: environment.clone(),
             require_specimen: flag(step, "require_specimen", false)?,
+            assigner,
         })
     }
 }
@@ -121,14 +262,29 @@ impl Transformer for CacheOrders {
             return Ok(());
         };
         let cache = self.environment.cache().map_err(failure(CACHE_ORDERS))?;
+        let now = context.envelope.received_at;
+        let mut load = None;
         for group in groups {
-            match cache.apply(group, context.envelope.received_at) {
-                Ok(outcome) => debug!(
-                    specimen = %outcome.specimen_id,
-                    added = outcome.added,
-                    cancelled = outcome.cancelled,
-                    "cached order"
-                ),
+            match cache.apply(group, now) {
+                Ok(outcome) => {
+                    let mut assigned = 0;
+                    if let Some(assigner) = &self.assigner
+                        && let Some(order) = cache
+                            .get(&outcome.specimen_id)
+                            .map_err(failure(CACHE_ORDERS))?
+                    {
+                        assigned = assigner
+                            .assign(&cache, &order, &mut load, now)
+                            .map_err(failure(CACHE_ORDERS))?;
+                    }
+                    debug!(
+                        specimen = %outcome.specimen_id,
+                        added = outcome.added,
+                        cancelled = outcome.cancelled,
+                        assigned,
+                        "cached order"
+                    );
+                }
                 Err(CacheError::MissingSpecimen) if !self.require_specimen => warn!(
                     message = %context.envelope.id,
                     "an order without a specimen identifier was not cached"
@@ -426,7 +582,11 @@ impl Transformer for SelectTests {
                 }
                 continue;
             }
-            group.order.tests.retain(|test| self.target.performs(test));
+            let cached = self.target.cached(&group, SELECT_TESTS)?;
+            group
+                .order
+                .tests
+                .retain(|test| self.target.performs(test, cached.as_ref()));
             if !group.order.tests.is_empty() {
                 kept.push(group);
             }
@@ -451,12 +611,14 @@ impl Transformer for SelectTests {
                     .iter()
                     .flat_map(|test| test.codings.iter().map(|coding| coding.code.as_str()))
                     .collect();
+                // The device is recorded by assignment, host queries and
+                // results; several devices may be offered the same test here.
                 cache
                     .set_status(
                         id,
                         &codes,
                         TestStatus::Sent,
-                        Some(&self.target.device),
+                        None,
                         context.envelope.received_at,
                     )
                     .map_err(failure(SELECT_TESTS))?;

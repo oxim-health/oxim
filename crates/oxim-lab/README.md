@@ -29,7 +29,8 @@ Orders are filed by specimen identifier (the tube barcode): the specimen's first
 
 | Order control | Effect |
 |---|---|
-| new, add | adds tests that are not cached yet; known tests keep their status; cancelled tests are requested again |
+| new | adds tests that are not cached yet; known tests keep their status, so a retransmitted order changes nothing; cancelled tests are requested again |
+| add | like new, and resulted tests are requested again: reruns and reflex tests |
 | replace | makes the open tests exactly the listed ones; others are cancelled |
 | cancel | cancels the listed tests, or every open test when none are listed |
 
@@ -47,7 +48,24 @@ CREA,chem-1,
 HGB,hema-1,
 ```
 
-A test may be performed by several devices. A test matches a row when any of its codes does, so both the LIS code and the device code work after `map-observations`.
+A test may be performed by several devices, listed in order of preference. A test matches a row when any of its codes does, so both the LIS code and the device code work after `map-observations`.
+
+## Load balancing
+
+Without further settings every device that performs a test receives it in its worklist. To spread the work instead, give `cache-orders` the routing table and a strategy; each open test is then assigned to one device, and `select-tests`/`has-tests-for` send it to that device only:
+
+```yaml
+transformers:
+  - {type: cache-orders, routing: routing.csv, balance: least_loaded}
+```
+
+| `balance` | The test goes to |
+|---|---|
+| `primary` (default) | the first device listed for it |
+| `round_robin` | the listed devices in turn, per test code |
+| `least_loaded` | the device with the fewest open tests in the cache (ties go to the first listed) |
+
+A device that asks for a tube in a host query is still offered every test it performs, and the assignment follows the tube.
 
 ## Host queries
 
