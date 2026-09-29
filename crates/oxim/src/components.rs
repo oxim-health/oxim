@@ -8,12 +8,27 @@ use oxim_transform::TransformEnvironment;
 
 use crate::settings::Settings;
 
+/// The registry plus the shared state that other parts of the program
+/// read, such as the device registry for alerts.
+pub(crate) struct Components {
+    /// Every component type.
+    pub(crate) registry: Registry,
+    /// The device registry behind `track-device`.
+    pub(crate) devices: DeviceEnvironment,
+}
+
 /// Builds the registry with every connector, step, normalizer and encoder
 /// shipped with OXIM. Code and routing tables are read from the configured
 /// tables directory; lab orders and the device registry live in the data
 /// directory.
 pub(crate) fn registry(settings: &Settings) -> Registry {
+    build(settings).registry
+}
+
+/// Builds the registry and keeps the shared state (see [`Components`]).
+pub(crate) fn build(settings: &Settings) -> Components {
     let mut registry = Registry::new();
+    let devices = DeviceEnvironment::new(settings.data_dir.join("devices.db"));
     oxim_connectors::register(&mut registry);
     oxim_mapping::register(&mut registry);
     oxim_fhir::register(&mut registry);
@@ -31,9 +46,6 @@ pub(crate) fn registry(settings: &Settings) -> Registry {
         &mut registry,
         ScriptEnvironment::new(settings.scripts_dir.clone()),
     );
-    oxim_devices::register(
-        &mut registry,
-        DeviceEnvironment::new(settings.data_dir.join("devices.db")),
-    );
-    registry
+    oxim_devices::register(&mut registry, devices.clone());
+    Components { registry, devices }
 }

@@ -75,6 +75,22 @@ pub(crate) fn validate(settings: &Settings, out: &mut impl Write) -> CliResult<u
             settings.channels_dir.display()
         )?;
     }
+    let alerts = &settings.alerts;
+    if !alerts.rules.is_empty() || !alerts.targets.is_empty() {
+        match oxim_alert::AlertEngine::new(alerts.clone(), &registry) {
+            Ok(_) => writeln!(
+                out,
+                "{:14} alerts  [{} rules, {} targets]",
+                "ok",
+                alerts.rules.len(),
+                alerts.targets.len()
+            )?,
+            Err(e) => {
+                invalid += 1;
+                writeln!(out, "{:14} alerts  {e}", "INVALID")?;
+            }
+        }
+    }
     Ok(invalid)
 }
 

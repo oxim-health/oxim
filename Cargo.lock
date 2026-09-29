@@ -747,6 +747,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs4"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e72ed92b67c146290f88e9c89d60ca163ea417a446f61ffd7b72df3e7f1dfd5"
+dependencies = [
+ "rustix",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "futures-channel"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1291,6 +1301,7 @@ name = "oxim"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "oxim-alert",
  "oxim-auth",
  "oxim-cda",
  "oxim-connectors",
@@ -1317,6 +1328,27 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "windows-service",
+]
+
+[[package]]
+name = "oxim-alert"
+version = "0.0.0"
+dependencies = [
+ "fs4",
+ "oxim-connectors",
+ "oxim-core",
+ "oxim-devices",
+ "oxim-model",
+ "oxim-store",
+ "rcgen",
+ "rustls-pki-types",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
