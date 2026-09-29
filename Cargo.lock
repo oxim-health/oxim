@@ -1295,6 +1295,7 @@ dependencies = [
  "oxim-cda",
  "oxim-connectors",
  "oxim-core",
+ "oxim-devices",
  "oxim-dicom",
  "oxim-fhir",
  "oxim-lab",
@@ -1319,6 +1320,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxim-anonymize"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "oxim-astm",
+ "oxim-capture",
+ "oxim-formats",
+ "oxim-hl7",
+ "oxim-poct1a",
+ "regex",
+ "ring",
+ "serde",
+ "serde-saphyr",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "oxim-astm"
 version = "0.0.0"
 dependencies = [
@@ -1340,6 +1360,20 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "oxim-capture"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "oxim-model",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-serial",
 ]
 
 [[package]]
@@ -1409,6 +1443,30 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "oxim-devices"
+version = "0.0.0"
+dependencies = [
+ "oxim-anonymize",
+ "oxim-capture",
+ "oxim-connectors",
+ "oxim-core",
+ "oxim-lab",
+ "oxim-mapping",
+ "oxim-model",
+ "oxim-sim",
+ "oxim-store",
+ "oxim-transform",
+ "rusqlite",
+ "serde",
+ "serde-saphyr",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
  "tracing",
 ]
 
@@ -1626,6 +1684,7 @@ dependencies = [
  "clap",
  "fastrand",
  "oxim-astm",
+ "oxim-capture",
  "oxim-hl7",
  "oxim-mllp",
  "oxim-poct1a",

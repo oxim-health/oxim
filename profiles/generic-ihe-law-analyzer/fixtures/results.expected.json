@@ -1,0 +1,230 @@
+[
+  {
+    "kind": "results",
+    "device": {
+      "name": "LAW-ANALYZER"
+    },
+    "groups": [
+      {
+        "patient": {
+          "identifiers": [
+            {
+              "value": "PAT000101",
+              "kind": "MR",
+              "assigner": "LAB"
+            }
+          ],
+          "name": {
+            "family": "Test",
+            "given": [
+              "Robin"
+            ]
+          },
+          "birth_date": "1980-01-01",
+          "sex": "unknown"
+        },
+        "specimen": {
+          "identifiers": [
+            {
+              "value": "SMP000101"
+            }
+          ],
+          "kind": {
+            "codings": [
+              {
+                "code": "SER"
+              }
+            ]
+          }
+        },
+        "order": {
+          "placer_id": "ORD000101",
+          "tests": [
+            {
+              "codings": [
+                {
+                  "system": "L",
+                  "code": "GLU",
+                  "display": "Glucose"
+                }
+              ],
+              "text": "Glucose"
+            }
+          ],
+          "specimen_ids": [
+            "SMP000101"
+          ]
+        },
+        "observations": [
+          {
+            "sequence": 1,
+            "code": {
+              "codings": [
+                {
+                  "system": "urn:oxim:example-lis",
+                  "code": "1520",
+                  "display": "Glucose"
+                },
+                {
+                  "system": "L",
+                  "code": "GLU",
+                  "display": "Glucose"
+                }
+              ],
+              "text": "Glucose"
+            },
+            "value": {
+              "type": "quantity",
+              "value": {
+                "value": "5.40",
+                "unit": "mmol/L"
+              }
+            },
+            "reference_range": {
+              "low": "3.9",
+              "high": "6.1",
+              "text": "3.9-6.1"
+            },
+            "interpretation": [
+              {
+                "code": "N"
+              }
+            ],
+            "status": "final",
+            "effective_at": "2026-09-29T11:59:00",
+            "specimen_id": "SMP000101"
+          }
+        ]
+      },
+      {
+        "patient": {
+          "identifiers": [
+            {
+              "value": "PAT000101",
+              "kind": "MR",
+              "assigner": "LAB"
+            }
+          ],
+          "name": {
+            "family": "Test",
+            "given": [
+              "Robin"
+            ]
+          },
+          "birth_date": "1980-01-01",
+          "sex": "unknown"
+        },
+        "specimen": {
+          "identifiers": [
+            {
+              "value": "SMP000102"
+            }
+          ],
+          "kind": {
+            "codings": [
+              {
+                "code": "BLD"
+              }
+            ]
+          }
+        },
+        "order": {
+          "placer_id": "ORD000102",
+          "tests": [
+            {
+              "codings": [
+                {
+                  "system": "L",
+                  "code": "HGB",
+                  "display": "Hemoglobin"
+                }
+              ],
+              "text": "Hemoglobin"
+            }
+          ],
+          "specimen_ids": [
+            "SMP000102"
+          ]
+        },
+        "observations": [
+          {
+            "sequence": 1,
+            "code": {
+              "codings": [
+                {
+                  "system": "urn:oxim:example-lis",
+                  "code": "2010",
+                  "display": "Hemoglobin"
+                },
+                {
+                  "system": "L",
+                  "code": "HGB",
+                  "display": "Hemoglobin"
+                }
+              ],
+              "text": "Hemoglobin"
+            },
+            "value": {
+              "type": "quantity",
+              "value": {
+                "value": "13.8",
+                "unit": "g/dL"
+              }
+            },
+            "reference_range": {
+              "low": "12.0",
+              "high": "17.0",
+              "text": "12.0-17.0"
+            },
+            "interpretation": [
+              {
+                "code": "N"
+              }
+            ],
+            "status": "final",
+            "effective_at": "2026-09-29T11:59:00",
+            "specimen_id": "SMP000102"
+          },
+          {
+            "sequence": 2,
+            "code": {
+              "codings": [
+                {
+                  "system": "urn:oxim:example-lis",
+                  "code": "2020",
+                  "display": "Leukocytes"
+                },
+                {
+                  "system": "L",
+                  "code": "WBC",
+                  "display": "Leukocytes"
+                }
+              ],
+              "text": "Leukocytes"
+            },
+            "value": {
+              "type": "quantity",
+              "value": {
+                "value": "6.25",
+                "unit": "10*9/L"
+              }
+            },
+            "reference_range": {
+              "low": "4.00",
+              "high": "10.00",
+              "text": "4.00-10.00"
+            },
+            "interpretation": [
+              {
+                "code": "N"
+              }
+            ],
+            "status": "final",
+            "effective_at": "2026-09-29T11:59:00",
+            "specimen_id": "SMP000102"
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -24,6 +24,7 @@ oxim-cda.workspace = true
 oxim-connectors.workspace = true
 oxim-core.workspace = true
 oxim-dicom.workspace = true
+oxim-devices.workspace = true
 oxim-fhir.workspace = true
 oxim-lab.workspace = true
 oxim-script.workspace = true

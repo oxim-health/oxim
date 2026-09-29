@@ -62,12 +62,15 @@ tokio-serial = { version = "5.5", default-features = false }
 tokio-util = "0.7"
 tracing = "0.1"
 
+oxim-anonymize = { path = "crates/oxim-anonymize" }
 oxim-astm = { path = "crates/oxim-astm" }
 oxim-auth = { path = "crates/oxim-auth" }
 oxim-server = { path = "crates/oxim-server" }
 oxim-cda = { path = "crates/oxim-cda" }
+oxim-capture = { path = "crates/oxim-capture" }
 oxim-connectors = { path = "crates/oxim-connectors" }
 oxim-core = { path = "crates/oxim-core" }
+oxim-devices = { path = "crates/oxim-devices" }
 oxim-fhir = { path = "crates/oxim-fhir" }
 oxim-dicom = { path = "crates/oxim-dicom" }
 oxim-formats = { path = "crates/oxim-formats" }
@@ -80,6 +83,7 @@ oxim-model = { path = "crates/oxim-model" }
 oxim-ncpdp = { path = "crates/oxim-ncpdp" }
 oxim-poct1a = { path = "crates/oxim-poct1a" }
 oxim-script = { path = "crates/oxim-script" }
+oxim-sim = { path = "crates/oxim-sim" }
 oxim-store = { path = "crates/oxim-store" }
 oxim-transform = { path = "crates/oxim-transform" }
 oxim-x12 = { path = "crates/oxim-x12" }

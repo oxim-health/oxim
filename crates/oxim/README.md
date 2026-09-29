@@ -15,6 +15,8 @@ oxim users add nurse --role viewer # prompts for the password without echo (or -
 oxim users list | disable <user> | enable <user> | passwd <user>
 oxim tokens create prometheus --role viewer --expires-in 365d
 oxim tokens list | revoke <id>
+oxim profile validate profiles/generic-astm-analyzer/profile.yaml
+oxim profile test profiles/generic-astm-analyzer/profile.yaml   # replay the profile's fixtures
 oxim service install               # Windows service or systemd unit
 oxim service start | stop | uninstall
 oxim import mirth export.xml --out channels   # Mirth Connect channels + migration report
@@ -25,6 +27,8 @@ oxim import mirth export.xml --out channels   # Mirth Connect channels + migrati
 - **Retention:** contents of completed messages are pruned after `retention.contents_after` (default 90 days) and whole messages after `retention.messages_after` (default 365 days). Cached lab orders (`orders.db`, see `oxim-lab`) that have not changed for `retention.orders_after` (default 90 days) are deleted.
 - **Web server:** `oxim run` also serves the REST API, metrics and web UI ([oxim-server](../oxim-server)) on `server.listen` (default `127.0.0.1:8080`), with HTTPS when `server.tls` is set. Users and API tokens live in `data_dir/auth.db`; sessions time out after `server.session_idle` (30 minutes) or `server.session_max` (12 hours).
 - **Migration:** `oxim import mirth` converts a Mirth Connect channel, channel group or server backup into channel files and writes `mirth-migration-report.md` (or JSON with `--report report.json`); `--value name=value` fills `${name}` placeholders, `--library` adds code template exports, `--dry-run` only prints. See `oxim-mirth`.
+- **Device profiles:** `oxim profile test` runs each fixture of a profile through the profile's channel in an in-process engine (code tables resolve against the profile's directory) and prints a conformance report; `--bless` writes the actual normalized content to the expected files. See [`oxim-devices`](../oxim-devices/README.md).
+- **Device registry:** channels with a `track-device` step record their devices in `devices.db` in the data directory.
 - **Services:** on Windows the program registers itself with the service control manager (automatic start); on Linux it writes and enables a hardened systemd unit.
 
 ## License

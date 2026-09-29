@@ -49,6 +49,25 @@ enum Command {
         #[command(subcommand)]
         command: PoctCommand,
     },
+    /// Replay the device side of a capture (.oximcap) against a host.
+    Replay {
+        /// The capture file.
+        capture: PathBuf,
+        #[command(flatten)]
+        endpoint: Endpoint,
+        /// Seconds to wait for each answer the capture shows.
+        #[arg(long, default_value_t = 10)]
+        timeout: u64,
+        /// Milliseconds of host silence that end an answer.
+        #[arg(long, default_value_t = 300)]
+        idle_ms: u64,
+        /// Keep the recorded pauses between transmissions.
+        #[arg(long)]
+        realtime: bool,
+        /// Print the exchange.
+        #[arg(long)]
+        verbose: bool,
+    },
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -361,6 +380,50 @@ async fn run(cli: Cli) -> SimResult<()> {
             )
             .await?;
             println!("conversation finished; host sent {received} documents");
+        }
+        Command::Replay {
+            capture,
+            endpoint,
+            timeout,
+            idle_ms,
+            realtime,
+            verbose,
+        } => {
+            let capture = oxim_capture::Capture::load(&capture)
+                .map_err(|e| format!("{}: {e}", capture.display()))?;
+            let target = match (endpoint.to, endpoint.listen) {
+                (Some(to), None) => oxim_capture::Endpoint::Connect(to),
+                (None, Some(listen)) => {
+                    eprintln!("waiting for the host to connect to {listen}");
+                    oxim_capture::Endpoint::Listen(listen)
+                }
+                _ => return Err("use --to or --listen".into()),
+            };
+            let options = oxim_capture::ReplayOptions {
+                answer_timeout: Duration::from_secs(timeout),
+                idle: Duration::from_millis(idle_ms),
+                realtime,
+                connect_timeout: Duration::from_secs(timeout),
+            };
+            let report = oxim_capture::replay(&capture, &target, &options).await?;
+            if verbose {
+                for (direction, bytes) in &report.transcript {
+                    let arrow = match direction {
+                        oxim_capture::Direction::DeviceToHost => "device >",
+                        oxim_capture::Direction::HostToDevice => "< host  ",
+                    };
+                    println!("{arrow} {}", oxim_capture::describe(bytes));
+                }
+            }
+            println!(
+                "connections={} bytes_sent={} answers={} unanswered={}",
+                report.connections, report.bytes_sent, report.answers, report.unanswered
+            );
+            if report.unanswered > 0 {
+                return Err(
+                    format!("{} expected answer(s) did not arrive", report.unanswered).into(),
+                );
+            }
         }
     }
     Ok(())

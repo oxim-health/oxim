@@ -1,6 +1,7 @@
 //! The component types available to channel files.
 
 use oxim_core::Registry;
+use oxim_devices::DeviceEnvironment;
 use oxim_lab::LabEnvironment;
 use oxim_script::ScriptEnvironment;
 use oxim_transform::TransformEnvironment;
@@ -9,7 +10,8 @@ use crate::settings::Settings;
 
 /// Builds the registry with every connector, step, normalizer and encoder
 /// shipped with OXIM. Code and routing tables are read from the configured
-/// tables directory; lab orders are cached in the data directory.
+/// tables directory; lab orders and the device registry live in the data
+/// directory.
 pub(crate) fn registry(settings: &Settings) -> Registry {
     let mut registry = Registry::new();
     oxim_connectors::register(&mut registry);
@@ -28,6 +30,10 @@ pub(crate) fn registry(settings: &Settings) -> Registry {
     oxim_script::register(
         &mut registry,
         ScriptEnvironment::new(settings.scripts_dir.clone()),
+    );
+    oxim_devices::register(
+        &mut registry,
+        DeviceEnvironment::new(settings.data_dir.join("devices.db")),
     );
     registry
 }
