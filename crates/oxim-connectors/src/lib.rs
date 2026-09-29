@@ -15,14 +15,17 @@
 //! | `astm-serial` | ASTM LIS01 over RS-232 | ASTM LIS01 over RS-232 | [`astm`] |
 //! | `astm-raw-tcp` | ASTM records without LIS01 framing | | [`astm`] |
 //! | `poct1a` | POCT1-A device conversations | | [`poct1a`] |
+//! | `channel` | Messages from other channels in this process | Hand-off to another channel | [`internal`] |
+//! | `timer` | A message at a fixed interval | | [`internal`] |
 //!
-//! `mllp` and `tcp` support TLS and mutual TLS through a `tls` settings
-//! block; see [`tls`].
+//! `mllp`, `tcp` and the `http` source support TLS and mutual TLS through a
+//! `tls` settings block; see [`tls`].
 
 pub mod astm;
 pub mod file;
 pub mod http;
 pub mod http_listener;
+pub mod internal;
 pub mod mllp;
 mod net;
 pub mod poct1a;
@@ -37,6 +40,7 @@ pub fn register(registry: &mut oxim_core::Registry) {
     file::register(registry);
     http::register(registry);
     http_listener::register(registry);
+    internal::register(registry);
     astm::register(registry);
     poct1a::register(registry);
 }
