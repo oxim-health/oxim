@@ -51,6 +51,16 @@ pub trait Normalizer: Send + Sync + fmt::Debug {
 pub trait Encoder: Send + Sync + fmt::Debug {
     /// Encodes the message.
     fn encode(&self, context: &MessageContext) -> Result<Encoded, StepError>;
+
+    /// Whether the encoder handles this kind of message, for example only
+    /// orders. A reply encoder (`source.response.encoder`) skips messages
+    /// it does not handle, so a device connection that carries both host
+    /// queries and results answers only the queries. Destinations always
+    /// encode, and report an error for content the encoder cannot handle.
+    fn handles(&self, context: &MessageContext) -> bool {
+        let _ = context;
+        true
+    }
 }
 
 /// Bytes produced by an [`Encoder`].
@@ -103,6 +113,9 @@ pub struct CompiledPipeline {
     pub transformers: Vec<Arc<dyn Transformer>>,
     /// Destinations in configuration order.
     pub destinations: Vec<CompiledDestination>,
+    /// Encodes the reply for the sender after the channel transformers,
+    /// when the channel answers with `source.response.encoder`.
+    pub reply_encoder: Option<Arc<dyn Encoder>>,
 }
 
 fn errored(error: StepError) -> Processed {
@@ -186,6 +199,16 @@ impl CompiledPipeline {
             });
         }
         run_transformers(&self.transformers, &mut context, "")?;
+        if context.response.is_none()
+            && let Some(encoder) = &self.reply_encoder
+            && encoder.handles(&context)
+        {
+            context.response = Some(
+                encoder
+                    .encode(&context)
+                    .map_err(|e| StepError::new("reply", e.to_string()))?,
+            );
+        }
         if let Some(reply) = &context.response {
             contents.push(Content::new(
                 Stage::Reply,

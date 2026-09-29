@@ -21,6 +21,7 @@ path = "src/main.rs"
 clap.workspace = true
 oxim-connectors.workspace = true
 oxim-core.workspace = true
+oxim-lab.workspace = true
 oxim-mapping.workspace = true
 oxim-model.workspace = true
 oxim-store.workspace = true

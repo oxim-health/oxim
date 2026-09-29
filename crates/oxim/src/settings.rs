@@ -137,9 +137,16 @@ pub(crate) struct RetentionSettings {
     /// Delete messages entirely this long after receipt.
     #[serde(default = "messages_after_default")]
     pub(crate) messages_after: Option<DurationText>,
+    /// Delete cached lab orders (see `oxim-lab`) not changed for this long.
+    #[serde(default = "orders_after_default")]
+    pub(crate) orders_after: Option<DurationText>,
     /// How often retention runs.
     #[serde(default = "retention_interval_default")]
     pub(crate) interval: DurationText,
+}
+
+fn orders_after_default() -> Option<DurationText> {
+    Some(DurationText(Duration::from_secs(90 * 86_400)))
 }
 
 fn contents_after_default() -> Option<DurationText> {
@@ -159,6 +166,7 @@ impl Default for RetentionSettings {
         Self {
             contents_after: contents_after_default(),
             messages_after: messages_after_default(),
+            orders_after: orders_after_default(),
             interval: retention_interval_default(),
         }
     }
@@ -246,6 +254,11 @@ impl Settings {
     /// The message database file.
     pub(crate) fn database_path(&self) -> PathBuf {
         self.data_dir.join("oxim.db")
+    }
+
+    /// The lab order cache file.
+    pub(crate) fn orders_path(&self) -> PathBuf {
+        self.data_dir.join("orders.db")
     }
 }
 

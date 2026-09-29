@@ -8,8 +8,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use oxim_core::{
-    ChannelConfig, DestinationConnector, Encoded, Engine, EngineOptions, MessageContext, Registry,
-    Reply, SendError, SourceConnector, SourceContext, StepError, SubmitInfo, SystemClock,
+    ChannelConfig, DestinationConnector, Encoded, Encoder, Engine, EngineOptions, MessageContext,
+    Registry, Reply, SendError, SourceConnector, SourceContext, StepError, SubmitInfo, SystemClock,
     Transformer, async_trait,
 };
 use oxim_model::{ConnectorId, DataType, MessageStatus};
@@ -56,6 +56,20 @@ impl Transformer for EchoReply {
     }
 }
 
+/// An encoder for content that never arrives.
+#[derive(Debug)]
+struct Picky;
+
+impl Encoder for Picky {
+    fn encode(&self, _context: &MessageContext) -> Result<Encoded, StepError> {
+        Err(StepError::new("picky", "cannot encode this"))
+    }
+
+    fn handles(&self, _context: &MessageContext) -> bool {
+        false
+    }
+}
+
 /// A destination that answers `ANSWER`, or keeps failing when told to.
 #[derive(Debug, Default)]
 struct Answering {
@@ -88,7 +102,8 @@ async fn engine(destination: Arc<Answering>) -> (Engine, mpsc::Sender<Request>) 
         })
         .add_transformer("echo-reply", |_| {
             Ok(Arc::new(EchoReply) as Arc<dyn Transformer>)
-        });
+        })
+        .add_encoder("picky", |_| Ok(Arc::new(Picky) as Arc<dyn Encoder>));
     let mut options = EngineOptions::default();
     options.idle_poll = Duration::from_millis(50);
     options.shutdown_grace = Duration::from_secs(2);
@@ -213,4 +228,45 @@ fn response_configuration_is_validated() {
     ] {
         assert!(ChannelConfig::from_yaml(yaml).is_err(), "{yaml}");
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_registered_encoder_can_produce_the_reply() {
+    let (engine, inbox) = engine(Arc::new(Answering::default())).await;
+    let config = ChannelConfig::from_yaml(
+        "id: echo
+source:
+  type: request
+  data_type: hl7v2
+  response: {mode: pipeline, encoder: {type: passthrough}}
+transformers:
+  - {type: set, path: MSH-3, value: OXIM}
+",
+    )
+    .unwrap();
+    engine.deploy(config).await.unwrap();
+    let reply = ask(&inbox, QUERY).await;
+    let text = String::from_utf8(reply.data.unwrap()).unwrap();
+    assert!(text.starts_with(r"MSH|^~\&|OXIM|LAB|"), "{text}");
+    assert_eq!(reply.data_type, Some(DataType::Hl7V2));
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn messages_the_encoder_does_not_handle_get_no_reply() {
+    let (engine, inbox) = engine(Arc::new(Answering::default())).await;
+    let config = ChannelConfig::from_yaml(
+        "id: picky
+source:
+  type: request
+  data_type: hl7v2
+  response: {mode: pipeline, encoder: {type: picky}}
+",
+    )
+    .unwrap();
+    engine.deploy(config).await.unwrap();
+    let reply = ask(&inbox, QUERY).await;
+    assert!(reply.data.is_none());
+    assert_eq!(reply.status, MessageStatus::Completed, "{:?}", reply.error);
+    engine.shutdown().await;
 }
