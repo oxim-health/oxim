@@ -44,6 +44,13 @@
 //! the patient changes), ORC, OBR, SPM, OBX and NTE, using the positions
 //! above. [`encode_orders`] writes `OML^O21`: per ordered test ORC, TQ1
 //! (when a priority is set) and OBR, with PID and SPM per group.
+//! [`encode_work_orders`] writes the specimen-centric IHE LAW work order
+//! `OML^O33` (SPM and SAC, then ORC, TQ1 and OBR per test), and
+//! [`encode_query_response`] answers a `QBP` host query with `RSP^K11`.
+//!
+//! In specimen-first layouts (`OML^O33`, `OUL^R22`) an SPM that precedes
+//! the orders applies to every order and result after it, up to the next
+//! SPM or PID.
 
 use std::collections::BTreeMap;
 
@@ -367,21 +374,35 @@ fn walk(message: &oxim_hl7::Message, reader: &Reader) -> Vec<(Option<Patient>, G
             groups.push((patient.clone(), group));
         }
     };
+    // In specimen-first layouts (OML^O33, OUL^R22) an SPM heads the orders
+    // that follow it until the next SPM or PID.
+    let mut specimen_first = false;
+    let mut heading: Option<Specimen> = None;
     for segment in message.segments() {
         match segment.id() {
             b"PID" => {
                 flush(&patient, &mut current);
                 patient = Some(reader.patient(&segment));
+                specimen_first = false;
+                heading = None;
             }
             b"ORC" => {
-                flush(&patient, &mut current);
                 let mut order = Order::default();
                 reader.apply_orc(&mut order, &segment);
+                if !(specimen_first && current.order.is_none() && !current.has_obr) {
+                    flush(&patient, &mut current);
+                    if specimen_first {
+                        current.specimen.clone_from(&heading);
+                    }
+                }
                 current.order = Some(order);
             }
             b"OBR" => {
                 if current.has_obr {
                     flush(&patient, &mut current);
+                    if specimen_first {
+                        current.specimen.clone_from(&heading);
+                    }
                 }
                 let mut specimen = current.specimen.take();
                 let order = current.order.get_or_insert_with(Order::default);
@@ -400,6 +421,12 @@ fn walk(message: &oxim_hl7::Message, reader: &Reader) -> Vec<(Option<Patient>, G
             }
             b"SPM" => {
                 let specimen = reader.specimen(&segment);
+                if specimen_first && (current.order.is_some() || current.has_obr) {
+                    flush(&patient, &mut current);
+                }
+                if current.order.is_none() && !current.has_obr {
+                    specimen_first = true;
+                }
                 let target = current.specimen.get_or_insert_with(Specimen::default);
                 if !specimen.identifiers.is_empty() {
                     target.identifiers = specimen.identifiers;
@@ -407,6 +434,9 @@ fn walk(message: &oxim_hl7::Message, reader: &Reader) -> Vec<(Option<Patient>, G
                 target.kind = specimen.kind.or(target.kind.take());
                 target.collected_at = specimen.collected_at.or(target.collected_at);
                 target.received_at = specimen.received_at.or(target.received_at);
+                if specimen_first {
+                    heading.clone_from(&current.specimen);
+                }
             }
             b"OBX" => {
                 let specimen_id = current
@@ -1220,6 +1250,174 @@ pub fn encode_orders(
                 }
             }
         }
+    }
+    Ok(writer.message)
+}
+
+fn order_control(order: &Order) -> &'static str {
+    match order.control {
+        Some(OrderControl::Cancel) => "CA",
+        Some(OrderControl::Replace) => "XO",
+        _ => "NW",
+    }
+}
+
+/// Writes one specimen-centric work order: SPM, SAC (container identifier
+/// = specimen identifier) and per test ORC, TQ1 (when a priority is set)
+/// and OBR, as in `OML^O33`.
+fn write_work_order(writer: &mut Writer, group: &OrderGroup) -> MappingResult<()> {
+    let order = &group.order;
+    let specimen_id = specimen_id(group.specimen.as_ref(), Some(order));
+    let empty = Specimen::default();
+    let specimen = group.specimen.as_ref().unwrap_or(&empty);
+    write_specimen(writer, specimen, specimen_id.as_deref(), None)?;
+    if specimen_id.is_some() || specimen.container.is_some() {
+        let sac = writer.segment("SAC")?;
+        writer.set("SAC", sac, "3.1", specimen_id.as_deref())?;
+        writer.set("SAC", sac, "9.2", specimen.container.as_deref())?;
+    }
+    write_notes(writer, &order.notes)?;
+    let tests: Vec<Option<&CodeableConcept>> = if order.tests.is_empty() {
+        vec![None]
+    } else {
+        order.tests.iter().map(Some).collect()
+    };
+    for (index, test) in tests.into_iter().enumerate() {
+        let orc = writer.segment("ORC")?;
+        writer.set("ORC", orc, "1", Some(order_control(order)))?;
+        writer.set("ORC", orc, "2", order.placer_id.as_deref())?;
+        writer.set("ORC", orc, "3", order.filler_id.as_deref())?;
+        writer.set(
+            "ORC",
+            orc,
+            "9",
+            time(order.requested_at.as_ref()).as_deref(),
+        )?;
+        if let Some(priority) = order.priority {
+            let tq1 = writer.segment("TQ1")?;
+            writer.set("TQ1", tq1, "1", Some("1"))?;
+            writer.set("TQ1", tq1, "9", Some(priority_code(priority)))?;
+        }
+        let obr = writer.segment("OBR")?;
+        writer.set("OBR", obr, "1", Some(&(index + 1).to_string()))?;
+        writer.set("OBR", obr, "2", order.placer_id.as_deref())?;
+        writer.set("OBR", obr, "3", order.filler_id.as_deref())?;
+        if let Some(test) = test {
+            writer.concept("OBR", obr, "4", test)?;
+        }
+    }
+    Ok(())
+}
+
+fn write_work_orders(writer: &mut Writer, groups: &[OrderGroup]) -> MappingResult<()> {
+    let mut last_patient: Option<&Option<Patient>> = None;
+    for group in groups {
+        if last_patient != Some(&group.patient) {
+            if let Some(patient) = &group.patient {
+                write_patient(writer, patient)?;
+            }
+            last_patient = Some(&group.patient);
+        }
+        write_work_order(writer, group)?;
+    }
+    Ok(())
+}
+
+/// Writes `OML^O33`, the specimen-centric work order of IHE Laboratory
+/// Analytical Workflow (LAW, transaction LAB-28) that analyzers accept:
+/// per order group PID (when the patient changes), SPM, SAC (SAC-3 is the
+/// specimen identifier) and per test ORC, TQ1 and OBR. Positions are those
+/// of the table above.
+pub fn encode_work_orders(
+    content: &ClinicalContent,
+    settings: &Hl7Encoding,
+    id: MessageId,
+    timestamp: Timestamp,
+) -> MappingResult<oxim_hl7::Message> {
+    let ClinicalContent::Orders { groups } = content else {
+        return Err(MappingError::WrongContent {
+            encoder: "hl7v2-oml-o33",
+            found: kind_name(content),
+        });
+    };
+    let mut writer = Writer::new(settings, "OML^O33^OML_O33", id, timestamp)?;
+    write_work_orders(&mut writer, groups)?;
+    Ok(writer.message)
+}
+
+/// Writes `RSP^K11`, the answer to a device's `QBP` host query (IHE LAW
+/// LAB-27): MSA (`AA` and the query's MSH-10), QAK (QPD-2 query tag, `OK`
+/// when there are orders and `NF` otherwise, QPD-1 query name, hit counts)
+/// and the query's QPD. MSH-5 and MSH-6 default to the query's MSH-3 and
+/// MSH-4. A `QRY` query without QPD is answered with QAK-1 from QRD-4.
+///
+/// IHE LAW then sends the orders separately as `OML^O33`
+/// ([`encode_work_orders`]); with `include_orders` they follow the QPD
+/// instead, for devices that expect the orders in the response.
+pub fn encode_query_response(
+    content: &ClinicalContent,
+    query: &oxim_hl7::Message,
+    settings: &Hl7Encoding,
+    include_orders: bool,
+    id: MessageId,
+    timestamp: Timestamp,
+) -> MappingResult<oxim_hl7::Message> {
+    let ClinicalContent::Orders { groups } = content else {
+        return Err(MappingError::WrongContent {
+            encoder: "hl7v2-rsp-k11",
+            found: kind_name(content),
+        });
+    };
+    let reader = Reader {
+        encoding: query.declared_encoding().ok().flatten().unwrap_or(UTF_8),
+    };
+    let header = query.header();
+    let mut settings = settings.clone();
+    if settings.receiving_application.is_none() {
+        settings.receiving_application = reader.get(&header, "3.1");
+    }
+    if settings.receiving_facility.is_none() {
+        settings.receiving_facility = reader.get(&header, "4.1");
+    }
+    let mut writer = Writer::new(&settings, "RSP^K11^RSP_K11", id, timestamp)?;
+    let msa = writer.segment("MSA")?;
+    writer.set("MSA", msa, "1", Some("AA"))?;
+    writer.set("MSA", msa, "2", reader.get(&header, "10").as_deref())?;
+    let qpd = query.segment("QPD", 1);
+    let tag = match &qpd {
+        Some(qpd) => reader.get(qpd, "2"),
+        None => query
+            .segment("QRD", 1)
+            .and_then(|qrd| reader.get(&qrd, "4")),
+    };
+    let found = !groups.is_empty();
+    let qak = writer.segment("QAK")?;
+    writer.set("QAK", qak, "1", tag.as_deref())?;
+    writer.set("QAK", qak, "2", Some(if found { "OK" } else { "NF" }))?;
+    let count = groups.len().to_string();
+    if let Some(qpd) = &qpd {
+        if let Some(name) = qpd.field(1) {
+            writer.raw(&format!("QAK[{qak}]-3"), name.raw())?;
+        }
+        writer.set("QAK", qak, "4", Some(&count))?;
+        writer.set("QAK", qak, "5", Some(&count))?;
+        writer.set("QAK", qak, "6", Some("0"))?;
+        let copy = writer.segment("QPD")?;
+        let same_delimiters = query.delimiters() == writer.message.delimiters();
+        for n in 1..=qpd.field_count() {
+            let Some(field) = qpd.field(n) else {
+                continue;
+            };
+            if same_delimiters {
+                writer.raw(&format!("QPD[{copy}]-{n}"), field.raw())?;
+            } else {
+                let text = field.to_text(reader.encoding);
+                writer.set("QPD", copy, &n.to_string(), Some(&text))?;
+            }
+        }
+    }
+    if include_orders {
+        write_work_orders(&mut writer, groups)?;
     }
     Ok(writer.message)
 }

@@ -377,3 +377,148 @@ fn obr3_only_placement_skips_spm() {
     );
     assert_eq!(oru.get("MSH-18").unwrap(), "8859/9");
 }
+
+fn lab_orders() -> ClinicalContent {
+    ClinicalContent::Orders {
+        groups: vec![OrderGroup {
+            patient: Some(Patient {
+                identifiers: vec![Identifier::new("PID001")],
+                ..Patient::default()
+            }),
+            specimen: Some(Specimen {
+                identifiers: vec![Identifier::new("S123")],
+                kind: Some(CodeableConcept::from_coding(Coding::new("SER"))),
+                ..Specimen::default()
+            }),
+            order: Order {
+                placer_id: Some("ORD1".into()),
+                tests: vec![
+                    CodeableConcept::from_coding(Coding::new("GLU").with_display("Glucose")),
+                    CodeableConcept::from_coding(Coding::new("CREA")),
+                ],
+                priority: Some(Priority::Routine),
+                control: Some(OrderControl::New),
+                ..Order::default()
+            },
+        }],
+    }
+}
+
+#[test]
+fn encodes_ihe_law_work_orders() {
+    let message = hl7::encode_work_orders(&lab_orders(), &settings(), id(), received()).unwrap();
+    let text = show(&message.to_bytes());
+    let lines: Vec<&str> = text.lines().collect();
+    assert!(
+        lines[0].starts_with(r"MSH|^~\&|OXIM||LIS||20260929143000+0300||OML^O33^OML_O33|"),
+        "{text}"
+    );
+    assert_eq!(
+        lines[1..],
+        [
+            "PID|1||PID001",
+            "SPM|1|S123||SER",
+            "SAC|||S123",
+            "ORC|NW|ORD1",
+            "TQ1|1||||||||R",
+            "OBR|1|ORD1||GLU^Glucose",
+            "ORC|NW|ORD1",
+            "TQ1|1||||||||R",
+            "OBR|2|ORD1||CREA",
+        ],
+        "{text}"
+    );
+    // The work order normalizes back to the same tests and specimen.
+    let ClinicalContent::Orders { groups } = hl7::normalize(&message).unwrap() else {
+        panic!("expected orders");
+    };
+    let tests: Vec<_> = groups
+        .iter()
+        .flat_map(|group| group.order.tests.iter().filter_map(|t| t.primary_code()))
+        .collect();
+    assert_eq!(tests, ["GLU", "CREA"]);
+    assert!(
+        groups
+            .iter()
+            .all(|group| group.order.specimen_ids == ["S123"])
+    );
+}
+
+const HL7_QUERY: &[u8] =
+    b"MSH|^~\\&|ANALYZER|LAB|OXIM|LAB|20260929143000||QBP^Q11^QBP_Q11|Q42|P|2.5.1\r\
+QPD|WOS^Work Order Step^IHE_LABTF|T0042|S123\r\
+RCP|I||R\r";
+
+#[test]
+fn answers_hl7_host_queries() {
+    let query = oxim_hl7::Message::parse(HL7_QUERY).unwrap();
+    let ClinicalContent::Query { query: asked, .. } = hl7::normalize(&query).unwrap() else {
+        panic!("expected a query");
+    };
+    assert_eq!(asked.specimen_ids, ["S123"]);
+
+    let mut settings = Hl7Encoding::default();
+    settings.utc_offset_minutes = 180;
+    let answer =
+        hl7::encode_query_response(&lab_orders(), &query, &settings, false, id(), received())
+            .unwrap();
+    let text = show(&answer.to_bytes());
+    let lines: Vec<&str> = text.lines().collect();
+    assert!(
+        lines[0].starts_with(r"MSH|^~\&|OXIM||ANALYZER|LAB|20260929143000+0300||RSP^K11^RSP_K11|"),
+        "{text}"
+    );
+    assert_eq!(
+        lines[1..],
+        [
+            "MSA|AA|Q42",
+            "QAK|T0042|OK|WOS^Work Order Step^IHE_LABTF|1|1|0",
+            "QPD|WOS^Work Order Step^IHE_LABTF|T0042|S123",
+        ],
+        "{text}"
+    );
+
+    let none = ClinicalContent::Orders { groups: vec![] };
+    let answer =
+        hl7::encode_query_response(&none, &query, &settings, true, id(), received()).unwrap();
+    let text = show(&answer.to_bytes());
+    assert!(
+        text.contains("\nQAK|T0042|NF|WOS^Work Order Step^IHE_LABTF|0|0|0\n"),
+        "{text}"
+    );
+    assert!(!text.contains("ORC"));
+
+    let answer =
+        hl7::encode_query_response(&lab_orders(), &query, &settings, true, id(), received())
+            .unwrap();
+    let text = show(&answer.to_bytes());
+    assert!(
+        text.contains(
+            "\nQPD|WOS^Work Order Step^IHE_LABTF|T0042|S123\nPID|1||PID001\nSPM|1|S123||SER\n"
+        ),
+        "{text}"
+    );
+}
+
+#[test]
+fn specimen_first_results_keep_their_specimens() {
+    let message = oxim_hl7::Message::parse(
+        b"MSH|^~\\&|ANALYZER|LAB|OXIM|LAB|20260929143000||OUL^R22^OUL_R22|R1|P|2.5.1\rPID|1||PID001\rSPM|1|S1||SER\rOBR|1||F1|GLU\rOBX|1|NM|GLU||5.4|mmol/L\rSPM|2|S2||BLD\rOBR|2||F2|HGB\rOBX|1|NM|HGB||13.5|g/dL\rOBR|3||F3|WBC\rOBX|1|NM|WBC||6.1|10*9/L\r",
+    )
+    .unwrap();
+    let ClinicalContent::Results { groups, .. } = hl7::normalize(&message).unwrap() else {
+        panic!("expected results");
+    };
+    let specimens: Vec<(&str, &str)> = groups
+        .iter()
+        .flat_map(|group| {
+            group.observations.iter().map(|observation| {
+                (
+                    observation.code.primary_code().unwrap(),
+                    observation.specimen_id.as_deref().unwrap(),
+                )
+            })
+        })
+        .collect();
+    assert_eq!(specimens, [("GLU", "S1"), ("HGB", "S2"), ("WBC", "S2")]);
+}

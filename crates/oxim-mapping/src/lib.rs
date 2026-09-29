@@ -8,7 +8,7 @@
 //! | Module | From messages | To messages |
 //! |---|---|---|
 //! | [`astm`] | results, QC, orders and host queries | orders and host query answers (`H`, `P`, `O`, `L`) |
-//! | [`hl7`] | `ORU`/`OUL` results, `ORM`/`OML` orders, `QRY`/`QBP` queries | `ORU^R01` results and QC, `OML^O21` orders |
+//! | [`hl7`] | `ORU`/`OUL` results, `ORM`/`OML` orders, `QRY`/`QBP` queries | `ORU^R01` results and QC, `OML^O21` orders, `OML^O33` work orders, `RSP^K11` query answers |
 //! | [`poct1a`] | `OBS` observations and QC, `DST`/`EVS` device events | not needed: devices do not accept results |
 //!
 //! Each module documents its field-by-field rules as tables. Values are
@@ -17,8 +17,8 @@
 //! codes, and units are never converted.
 //!
 //! [`register`] adds the normalizers and the encoders `hl7v2-oru-r01`,
-//! `hl7v2-oml-o21`, `astm-orders`, `astm-query-response` and
-//! `clinical-json` to an engine [`Registry`](oxim_core::Registry), so
+//! `hl7v2-oml-o21`, `hl7v2-oml-o33`, `hl7v2-rsp-k11`, `astm-orders`,
+//! `astm-query-response` and `clinical-json` to an engine [`Registry`](oxim_core::Registry), so
 //! channels can write:
 //!
 //! ```yaml
@@ -36,8 +36,10 @@
 //!       utc_offset: 180
 //! ```
 //!
-//! HL7 query responses (`RSP^K11`, IHE LAW `OML^O33`) are not produced yet;
-//! host query answers to analyzers use `astm-query-response`.
+//! Host queries are answered with `astm-query-response` (ASTM analyzers) or
+//! `hl7v2-rsp-k11` (HL7 analyzers, IHE LAW), from the orders that the
+//! `answer-query` step of `oxim-lab` finds; IHE LAW analyzers receive the
+//! work orders themselves as `OML^O33` (`hl7v2-oml-o33`).
 
 pub mod astm;
 pub mod codes;
@@ -50,5 +52,6 @@ pub mod values;
 pub use error::{MappingError, MappingResult};
 pub use steps::{
     AstmNormalizer, AstmOrdersEncoder, ClinicalJsonEncoder, Hl7Normalizer, OmlEncoder, OruEncoder,
-    Poct1aNormalizer, astm_settings, hl7_settings, register,
+    Poct1aNormalizer, QueryResponseEncoder, WorkOrderEncoder, astm_settings, hl7_settings,
+    register,
 };

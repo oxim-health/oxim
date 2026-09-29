@@ -67,7 +67,7 @@ struct Lab {
 async fn lab() -> Lab {
     let mut senders = HashMap::new();
     let mut receivers = HashMap::new();
-    for name in ["orders", "chem-1", "hema-1"] {
+    for name in ["orders", "chem-1", "hema-1", "immuno-1"] {
         let (tx, rx) = mpsc::channel(8);
         senders.insert(name, tx);
         receivers.insert(
@@ -82,7 +82,8 @@ async fn lab() -> Lab {
     let routing = Routing::new()
         .with("GLU", "chem-1")
         .with("CREA", "chem-1")
-        .with("HGB", "hema-1");
+        .with("HGB", "hema-1")
+        .with("TSH", "immuno-1");
     let environment =
         LabEnvironment::with_cache(cache.clone()).with_routing("routing.csv", routing);
 
@@ -163,6 +164,24 @@ transformers:
             .await
             .unwrap();
     }
+    // An HL7 analyzer (IHE LAW): queries are answered with RSP^K11 that
+    // carries the orders.
+    let hl7 = "id: immuno-1-queries
+source:
+  type: request
+  data_type: hl7v2
+  normalize: true
+  response:
+    mode: pipeline
+    encoder: {type: hl7v2-rsp-k11, include_orders: true}
+  settings: {inbox: immuno-1}
+transformers:
+  - {type: answer-query, device: immuno-1, routing: routing.csv}
+";
+    engine
+        .deploy(ChannelConfig::from_yaml(hl7).unwrap())
+        .await
+        .unwrap();
     Lab {
         engine,
         inboxes: senders,
@@ -207,7 +226,8 @@ const ORDER: &str = "MSH|^~\\&|LIS|LAB|OXIM|LAB|20260929100000||OML^O21|M1|P|2.5
 PID|1||P1001^^^LAB^MR||DOE^JANE||19800101|F\r\
 ORC|NW|ORD1\rOBR|1|ORD1||GLU^Glucose^L\rSPM|1|S123||BLD\r\
 ORC|NW|ORD1\rOBR|2|ORD1||CREA^Creatinine^L\rSPM|1|S123||BLD\r\
-ORC|NW|ORD1\rOBR|3|ORD1||HGB^Hemoglobin^L\rSPM|1|S123||BLD\r";
+ORC|NW|ORD1\rOBR|3|ORD1||HGB^Hemoglobin^L\rSPM|1|S123||BLD\r\
+ORC|NW|ORD1\rOBR|4|ORD1||TSH^Thyrotropin^L\rSPM|1|S123||BLD\r";
 
 fn query(specimen: &str, tests: &str) -> String {
     format!("H|\\^&|||CHEM^1.0\rQ|1|^{specimen}||{tests}||||||||O\rL|1|N\r")
@@ -285,6 +305,31 @@ async fn orders_are_cached_pushed_and_answered() {
             .as_deref(),
         Some("hema-1")
     );
+
+    // The HL7 analyzer queries with QBP^Q11 and gets RSP^K11 with its test.
+    let reply = lab
+        .ask(
+            "immuno-1",
+            "MSH|^~\\&|IMMUNO|LAB|OXIM|LAB|20260929110000||QBP^Q11^QBP_Q11|Q7|P|2.5.1\r\
+QPD|WOS^Work Order Step^IHE_LABTF|T7|S123\rRCP|I||R\r",
+        )
+        .await;
+    let text = String::from_utf8(reply.data.unwrap()).unwrap();
+    assert!(text.contains("\rMSA|AA|Q7\rQAK|T7|OK|"), "{text}");
+    assert!(
+        text.contains("\rSPM|1|S123||BLD\rSAC|||S123\rORC|NW|ORD1\rOBR|1|ORD1||TSH^Thyrotropin^L"),
+        "{text}"
+    );
+    assert!(!text.contains("GLU"), "{text}");
+    let reply = lab
+        .ask(
+            "immuno-1",
+            "MSH|^~\\&|IMMUNO|LAB|OXIM|LAB|20260929110000||QBP^Q11^QBP_Q11|Q8|P|2.5.1\r\
+QPD|WOS^Work Order Step^IHE_LABTF|T8|S999\rRCP|I||R\r",
+        )
+        .await;
+    let text = String::from_utf8(reply.data.unwrap()).unwrap();
+    assert!(text.contains("\rQAK|T8|NF|"), "{text}");
 
     // Cancelling the whole order reaches both analyzers and empties the
     // answers.
