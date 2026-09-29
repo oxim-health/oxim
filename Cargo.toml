@@ -32,6 +32,7 @@ windows-service = "0.8"
 bytes = "1"
 dicom-core = "0.10"
 dicom-dictionary-std = { version = "0.10", features = ["sop-class"] }
+dicom-json = "0.10"
 dicom-object = "0.10"
 # Without the default features: no image codecs (the router forwards pixel
 # data as encoded) and no rayon thread pool.

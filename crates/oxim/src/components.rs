@@ -8,13 +8,17 @@ use crate::settings::Settings;
 
 /// Builds the registry with every connector, step, normalizer and encoder
 /// shipped with OXIM. Code and routing tables are read from the configured
-/// tables directory; lab orders are cached in the data directory.
+/// tables directory; lab orders, the DICOM instance index and the modality
+/// worklist are kept in the data directory.
 pub(crate) fn registry(settings: &Settings) -> Registry {
     let mut registry = Registry::new();
     oxim_connectors::register(&mut registry);
     oxim_mapping::register(&mut registry);
     oxim_fhir::register(&mut registry);
-    oxim_dicom::register(&mut registry);
+    oxim_dicom::register_with(
+        &mut registry,
+        &oxim_dicom::DicomEnvironment::new(settings.data_dir.clone()),
+    );
     oxim_transform::register(
         &mut registry,
         TransformEnvironment::new(settings.tables_dir.clone()),
