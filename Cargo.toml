@@ -41,9 +41,9 @@ encoding_rs = "0.8"
 fastrand = "2"
 http = "1"
 http-body-util = "0.1"
-hyper = { version = "1", features = ["client", "http1"] }
+hyper = { version = "1", features = ["client", "http1", "server"] }
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "ring", "tls12", "logging"] }
-hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "server", "tokio"] }
 memchr = "2.7"
 quick-xml = "0.42"
 regex = "1.11"

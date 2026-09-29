@@ -1,6 +1,6 @@
 [package]
 name = "oxim-connectors"
-description = "Source and destination connectors for OXIM channels: MLLP, TCP, files, HTTP, ASTM, POCT1-A and serial lines"
+description = "Source and destination connectors for OXIM channels: MLLP, TCP, files, HTTP, ASTM, POCT1-A and serial lines, with TLS"
 keywords = ["healthcare", "hl7", "astm", "mllp", "laboratory"]
 categories = ["network-programming"]
 readme = "README.md"
