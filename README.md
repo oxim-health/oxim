@@ -36,6 +36,7 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-fhir`](crates/oxim-fhir) | HL7 FHIR R4 JSON resources, mapping to and from the normalized model, transaction response summaries |
 | [`crates/oxim-lab`](crates/oxim-lab) | Laboratory workflows: order cache, host query answers, test routing and worklist download |
 | [`crates/oxim-connectors`](crates/oxim-connectors) | Source and destination connectors: MLLP, raw TCP, files, HTTP, ASTM over TCP and serial, POCT1-A |
+| [`ui`](ui) | Web UI (Svelte 5, TypeScript), embedded in the `oxim` binary |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |
 | [`fuzz`](fuzz) | Fuzz targets (cargo-fuzz) |
@@ -50,6 +51,14 @@ OXIM requires Rust 1.89 or newer.
 cargo build --workspace
 cargo test --workspace
 ```
+
+The web UI is built separately with Node 22 or newer; the next `cargo build` embeds it in the `oxim` binary (without it, OXIM builds and runs with the REST API only):
+
+```sh
+cd ui && npm ci && npm run build
+```
+
+See [ui/README.md](ui/README.md) for its development, unit and end-to-end tests.
 
 The checks run by CI can be reproduced locally:
 

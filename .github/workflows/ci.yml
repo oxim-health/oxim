@@ -78,6 +78,46 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --workspace --no-deps --locked
 
+  ui:
+    name: Web UI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: npm ci
+      - name: Generated API types match ui/openapi.json
+        run: |
+          npm run gen:api
+          git diff --exit-code -- src/lib/api/schema.d.ts
+      - run: npm run lint
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - name: Build OXIM with the embedded UI
+        working-directory: .
+        run: cargo build -p oxim --locked
+      - run: npx playwright install --with-deps chromium
+      - name: End-to-end tests against the embedded UI
+        run: npx playwright test
+        env:
+          OXIM_E2E_EMBEDDED: "1"
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            ui/playwright-report
+            ui/test-results
+
   deny:
     name: Licenses and advisories
     runs-on: ubuntu-latest
