@@ -1172,8 +1172,55 @@ async fn responses_carry_security_headers_and_json_errors() {
     assert_eq!(wrong_method.status, StatusCode::METHOD_NOT_ALLOWED);
     assert_eq!(wrong_method.error_code(), "method_not_allowed");
 
-    let root = api.get("/", &Auth::None).await.json();
-    assert_eq!(root["api"], "/api/v1");
+    if oxim_server::ui_embedded() {
+        let root = api.get("/", &Auth::None).await;
+        assert_eq!(
+            root.headers[header::CONTENT_TYPE],
+            "text/html; charset=utf-8"
+        );
+    } else {
+        let root = api.get("/", &Auth::None).await.json();
+        assert_eq!(root["api"], "/api/v1");
+    }
+}
+
+#[tokio::test]
+async fn browsers_get_a_page_when_the_build_has_no_ui() {
+    let api = setup().await;
+    let request = |path: &str| {
+        Request::builder()
+            .uri(path)
+            .header(header::ACCEPT, "text/html,application/xhtml+xml")
+            .body(Body::empty())
+            .unwrap()
+    };
+    let response = api
+        .app
+        .clone()
+        .oneshot(request("/channels/lab"))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()[header::CONTENT_TYPE],
+        "text/html; charset=utf-8"
+    );
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let text = String::from_utf8_lossy(&body);
+    if oxim_server::ui_embedded() {
+        assert!(text.contains("<div id=\"app\">"), "{text}");
+    } else {
+        assert!(text.contains("npm run build"), "{text}");
+        assert!(!text.contains("<script"), "the page must not need scripts");
+    }
+    // API paths never fall back to HTML.
+    let response = api
+        .app
+        .clone()
+        .oneshot(request("/api/v1/nothing"))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

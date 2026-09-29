@@ -166,7 +166,12 @@ pub(crate) async fn get(
         .store()
         .run(move |store| {
             let mut found = Vec::new();
-            for stage in [Stage::Raw, Stage::Normalized, Stage::Transformed] {
+            for stage in [
+                Stage::Raw,
+                Stage::Normalized,
+                Stage::Transformed,
+                Stage::Reply,
+            ] {
                 if let Some(content) = store.content(id, stage, None)? {
                     found.push(content_info(&content));
                 }

@@ -47,6 +47,7 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-capture`](crates/oxim-capture) | The `.oximcap` capture format, a recording TCP proxy and serial bridge, and capture replay |
 | [`crates/oxim-anonymize`](crates/oxim-anonymize) | Removes protected health information from HL7 v2, ASTM, POCT1-A, JSON and XML messages and captures |
 | [`profiles`](profiles) | Example device profiles with synthetic fixtures |
+| [`ui`](ui) | Web UI (Svelte 5, TypeScript), embedded in the `oxim` binary |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |
 | [`docs/install`](docs/install/README.md) | Installation guides: Linux, Windows, Docker, Kubernetes and offline |
@@ -67,6 +68,14 @@ OXIM requires Rust 1.89 or newer.
 cargo build --workspace
 cargo test --workspace
 ```
+
+The web UI is built separately with Node 22 or newer; the next `cargo build` embeds it in the `oxim` binary (without it, OXIM builds and runs with the REST API only):
+
+```sh
+cd ui && npm ci && npm run build
+```
+
+See [ui/README.md](ui/README.md) for its development, unit and end-to-end tests.
 
 The checks run by CI can be reproduced locally:
 

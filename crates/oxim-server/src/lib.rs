@@ -20,6 +20,7 @@ mod mask;
 mod routes;
 mod state;
 mod tls;
+mod ui;
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -29,7 +30,6 @@ use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::http::{HeaderName, HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use serde_json::json;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tower_http::services::{ServeDir, ServeFile};
@@ -45,15 +45,10 @@ pub fn openapi() -> serde_json::Value {
     routes::openapi_document()
 }
 
-async fn root_note() -> Response {
-    axum::Json(json!({
-        "name": "oxim",
-        "version": env!("CARGO_PKG_VERSION"),
-        "api": API_PREFIX,
-        "openapi": format!("{API_PREFIX}/openapi.json"),
-        "note": "the web UI is not installed; set server.ui_dir to serve it",
-    }))
-    .into_response()
+/// Whether this build carries the web UI (the `embedded-ui` feature with a
+/// built `ui/dist`). A configured `ui_dir` takes precedence over it.
+pub fn ui_embedded() -> bool {
+    ui::embedded()
 }
 
 const SECURITY_HEADERS: &[(&str, &str)] = &[
@@ -113,12 +108,14 @@ async fn harden(State(state): State<AppState>, request: Request, next: Next) -> 
     response
 }
 
-fn ui(dir: &Path) -> ServeDir<ServeFile> {
+fn ui_dir(dir: &Path) -> ServeDir<ServeFile> {
     ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html")))
 }
 
 /// The complete application: the API under [`API_PREFIX`], `/metrics`, and
-/// the web UI (or a JSON note at `/` when no UI is installed).
+/// the web UI: from `ui_dir` when set, else the files embedded with the
+/// `embedded-ui` feature, else a page (or, for non-browser clients, a JSON
+/// note at `/`) explaining how to add it.
 pub fn router(state: AppState) -> Router {
     let config = &state.inner.config;
     let (timed, streaming) = routes::api();
@@ -130,10 +127,9 @@ pub fn router(state: AppState) -> Router {
         .nest(API_PREFIX, api)
         .route("/metrics", axum::routing::get(routes::metrics::metrics));
     app = match config.ui_dir.as_deref().filter(|dir| dir.is_dir()) {
-        Some(dir) => app.fallback_service(ui(dir)),
-        None => app
-            .route("/", axum::routing::get(root_note))
-            .fallback(routes::not_found),
+        Some(dir) => app.fallback_service(ui_dir(dir)),
+        None if ui::embedded() => app.fallback(ui::serve_embedded),
+        None => app.fallback(ui::missing),
     };
     app.layer(DefaultBodyLimit::max(config.max_body_bytes))
         .layer(middleware::from_fn_with_state(state.clone(), harden))
