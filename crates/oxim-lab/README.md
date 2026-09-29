@@ -86,6 +86,27 @@ destinations:
 | `include_resulted` | `false` | also offer tests that already have results |
 | `mark_sent` | `true` | record the offered tests as sent |
 
+HL7 analyzers that follow IHE Laboratory Analytical Workflow send `QBP^Q11` over MLLP. `hl7v2-rsp-k11` answers with `RSP^K11` (`QAK` status `OK` or `NF`). IHE LAW then expects the orders as a separate `OML^O33`, which a destination to the analyzer sends; devices that expect the orders inside the response use `include_orders: true`:
+
+```yaml
+source:
+  type: mllp
+  data_type: hl7v2
+  normalize: true
+  response:
+    mode: pipeline
+    encoder: {type: hl7v2-rsp-k11}
+  settings: {listen: 0.0.0.0:2577}
+transformers:
+  - {type: answer-query, device: immuno-1, routing: routing.csv}
+destinations:
+  - id: immuno-1
+    type: mllp
+    filters: [{type: clinical-kind, kinds: [orders]}]
+    encoder: {type: hl7v2-oml-o33}
+    settings: {target: 10.0.0.31:2575}
+```
+
 For each queried tube the answer holds the open tests (pending or sent) that the device performs and that the query asked for. Unknown tubes and tubes with nothing left are left out, so `astm-query-response` answers "no information" (`L|1|I`).
 
 ## Worklist download

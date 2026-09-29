@@ -128,6 +128,75 @@ impl Encoder for OmlEncoder {
     }
 }
 
+/// Encodes orders as HL7 v2 `OML^O33`, the IHE LAW work order for
+/// analyzers.
+#[derive(Debug, Clone, Default)]
+pub struct WorkOrderEncoder {
+    /// Header settings.
+    pub settings: Hl7Encoding,
+}
+
+impl Encoder for WorkOrderEncoder {
+    fn encode(&self, context: &MessageContext) -> Result<Encoded, StepError> {
+        let content = clinical(context, "hl7v2-oml-o33")?;
+        let message = hl7::encode_work_orders(
+            content,
+            &self.settings,
+            context.envelope.id,
+            context.envelope.received_at,
+        )
+        .map_err(step_error("hl7v2-oml-o33"))?;
+        Ok(Encoded {
+            data_type: DataType::Hl7V2,
+            data: message.to_bytes(),
+        })
+    }
+
+    fn handles(&self, context: &MessageContext) -> bool {
+        matches!(context.clinical, Some(ClinicalContent::Orders { .. }))
+    }
+}
+
+/// Answers an HL7 v2 host query (`QBP`) with `RSP^K11`, built from the
+/// orders that a step such as `answer-query` put in place of the query.
+#[derive(Debug, Clone, Default)]
+pub struct QueryResponseEncoder {
+    /// Header settings.
+    pub settings: Hl7Encoding,
+    /// Whether the orders follow the QPD segment.
+    pub include_orders: bool,
+}
+
+impl Encoder for QueryResponseEncoder {
+    fn encode(&self, context: &MessageContext) -> Result<Encoded, StepError> {
+        let content = clinical(context, "hl7v2-rsp-k11")?;
+        let Document::Hl7(query) = &context.document else {
+            return Err(StepError::new(
+                "hl7v2-rsp-k11",
+                "the query being answered is not an HL7 v2 message",
+            ));
+        };
+        let message = hl7::encode_query_response(
+            content,
+            query,
+            &self.settings,
+            self.include_orders,
+            context.envelope.id,
+            context.envelope.received_at,
+        )
+        .map_err(step_error("hl7v2-rsp-k11"))?;
+        Ok(Encoded {
+            data_type: DataType::Hl7V2,
+            data: message.to_bytes(),
+        })
+    }
+
+    fn handles(&self, context: &MessageContext) -> bool {
+        matches!(context.clinical, Some(ClinicalContent::Orders { .. }))
+            && matches!(context.document, Document::Hl7(_))
+    }
+}
+
 /// Encodes orders as ASTM records, for worklist download or as the answer
 /// to a host query.
 #[derive(Debug, Clone, Default)]
@@ -276,8 +345,8 @@ pub fn astm_settings(step: &StepConfig, report_type: &str) -> Result<AstmEncodin
 }
 
 /// Registers the normalizers for ASTM, HL7 v2 and POCT1-A and the encoders
-/// `hl7v2-oru-r01`, `hl7v2-oml-o21`, `astm-orders`, `astm-query-response`
-/// and `clinical-json`.
+/// `hl7v2-oru-r01`, `hl7v2-oml-o21`, `hl7v2-oml-o33`, `hl7v2-rsp-k11`,
+/// `astm-orders`, `astm-query-response` and `clinical-json`.
 pub fn register(registry: &mut Registry) {
     registry
         .add_normalizer(DataType::Astm, Arc::new(AstmNormalizer))
@@ -291,6 +360,27 @@ pub fn register(registry: &mut Registry) {
         .add_encoder("hl7v2-oml-o21", |step| {
             Ok(Arc::new(OmlEncoder {
                 settings: hl7_settings(step)?,
+            }) as Arc<dyn Encoder>)
+        })
+        .add_encoder("hl7v2-oml-o33", |step| {
+            Ok(Arc::new(WorkOrderEncoder {
+                settings: hl7_settings(step)?,
+            }) as Arc<dyn Encoder>)
+        })
+        .add_encoder("hl7v2-rsp-k11", |step| {
+            let include_orders = match step.settings.get("include_orders") {
+                None => false,
+                Some(serde_json::Value::Bool(value)) => *value,
+                Some(_) => {
+                    return Err(EngineError::Config(format!(
+                        "step {:?}: include_orders must be true or false",
+                        step.kind
+                    )));
+                }
+            };
+            Ok(Arc::new(QueryResponseEncoder {
+                settings: hl7_settings(step)?,
+                include_orders,
             }) as Arc<dyn Encoder>)
         })
         .add_encoder("astm-orders", |step| {
