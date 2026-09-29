@@ -1,0 +1,30 @@
+[package]
+name = "oxim-sim"
+description = "Device and system simulators for testing OXIM: analyzers, LIS and point-of-care devices"
+keywords = ["healthcare", "hl7", "astm", "simulator", "testing"]
+categories = ["command-line-utilities", "development-tools::testing"]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "oxim-sim"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+fastrand.workspace = true
+oxim-astm.workspace = true
+oxim-hl7.workspace = true
+oxim-mllp.workspace = true
+oxim-poct1a.workspace = true
+tokio = { workspace = true, features = ["net", "io-util", "signal"] }
+
+[lints]
+workspace = true
