@@ -26,6 +26,7 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-model`](crates/oxim-model) | Message envelope, identifiers and the normalized, FHIR-aligned clinical model |
 | [`crates/oxim-poct1a`](crates/oxim-poct1a) | POCT1-A stream splitting, lossless messages, builders and the host conversation |
 | [`crates/oxim-store`](crates/oxim-store) | Durable message store and per-destination delivery queues (SQLite) |
+| [`crates/oxim-core`](crates/oxim-core) | Channel runtime: sources, pipeline, durable queues, destination workers and configuration |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |
 | [`fuzz`](fuzz) | Fuzz targets (cargo-fuzz) |
@@ -34,7 +35,7 @@ The full crate map is described in [section 14 of the specification](docs/SPEC.m
 
 ## Building
 
-OXIM requires Rust 1.88 or newer.
+OXIM requires Rust 1.89 or newer.
 
 ```sh
 cargo build --workspace
