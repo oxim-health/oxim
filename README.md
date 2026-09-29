@@ -28,6 +28,7 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-store`](crates/oxim-store) | Durable message store and per-destination delivery queues (SQLite) |
 | [`crates/oxim-core`](crates/oxim-core) | Channel runtime: sources, pipeline, durable queues, destination workers and configuration |
 | [`crates/oxim`](crates/oxim) | The `oxim` program: engine, live channel reload, retention, message tools and OS service |
+| [`crates/oxim-sim`](crates/oxim-sim) | Simulated analyzers (ASTM), LIS systems (MLLP) and POCT devices, with synthetic data and load tests |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |
 | [`fuzz`](fuzz) | Fuzz targets (cargo-fuzz) |
