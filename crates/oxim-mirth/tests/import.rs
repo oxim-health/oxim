@@ -187,7 +187,20 @@ fn imports_a_server_configuration_backup() {
     let second = ChannelConfig::from_yaml(&result.channels[1].yaml).unwrap();
     assert_eq!(second.filters[0].kind, "condition");
     let destinations: Vec<&str> = second.destinations.iter().map(|d| d.id.as_str()).collect();
-    assert_eq!(destinations, ["destination-1", "destination-1-2"]);
+    assert_eq!(
+        destinations,
+        ["destination-1", "destination-1-2", "destination-1-3"]
+    );
+    // The Channel Writer targets the third channel of the backup.
+    let writer = second
+        .destinations
+        .iter()
+        .find(|d| d.kind == "channel")
+        .expect("a channel destination");
+    assert_eq!(
+        writer.settings["channel"].as_str(),
+        Some("warehouse-import")
+    );
     assert!(result.channels[2].draft && !result.channels[2].enabled);
     let report = &result.report;
     assert_eq!(report.channels.len(), 3);
@@ -204,11 +217,9 @@ fn imports_a_server_configuration_backup() {
             .0
             .starts_with("2 value(s)")
     );
-    assert!(
-        detail(report, "Channel Writer")[0]
-            .0
-            .contains("no destination connector")
-    );
+    let writer = detail(report, "Channel Writer");
+    assert_eq!(writer[0].1, Outcome::Converted);
+    assert!(writer[0].0.contains("warehouse-import"), "{}", writer[0].0);
     let json: serde_json::Value = serde_json::from_str(&report.to_json().unwrap()).unwrap();
     assert_eq!(
         json["channels"][2]["file_name"],
@@ -227,7 +238,10 @@ fn imports_channel_groups_and_can_skip_disabled_channels() {
     );
     let ids: Vec<&str> = result.channels.iter().map(|c| c.id.as_str()).collect();
     assert_eq!(ids, ["glucose-meters", "retired-meters"]);
-    assert!(result.channels[0].draft);
+    // The HTTP listener becomes an `http` source.
+    assert!(!result.channels[0].draft);
+    let meters = ChannelConfig::from_yaml(&result.channels[0].yaml).unwrap();
+    assert_eq!(meters.source.kind, "http");
     assert!(!result.channels[1].enabled);
     check("channel-group", &result);
 

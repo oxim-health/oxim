@@ -52,7 +52,9 @@ Each item names the channel, the element, the reason and its XPath-style locatio
 | File Reader, File Writer on local files | `file` source / destination | converted; unsupported options approximated |
 | File connectors over FTP, SFTP, SMB, S3, WebDAV | — | unsupported (planned) |
 | HTTP Sender (POST, PUT) | `http` destination with headers, query parameters and timeout | converted; credentials are never copied |
-| HTTP Listener, database, JavaScript, channel reader/writer, SMTP, JMS, DICOM, web service, document writer | — | unsupported (planned connectors) |
+| HTTP Listener | `http` source with the context path and a fixed 2xx status | converted; other methods, XML request conversion and authentication approximated |
+| Channel Reader / Channel Writer | `channel` source / destination; the writer's target is resolved to the imported channel's id | converted; a target outside the export gets a placeholder (approximated) |
+| Database, JavaScript, SMTP, JMS, DICOM, web service, document writer | — | unsupported (planned connectors) |
 | Data types HL7V2, XML, JSON, RAW | `hl7v2`, `xml`, `json`, `raw` | converted |
 | Data type DELIMITED | `delimited` (delimiter, quote, header) or `fixed_width` (column widths) in `source.format` | converted |
 | Data types HL7V3, EDI/X12, NCPDP, DICOM | `xml`, `x12`, `ncpdp`, `dicom` | approximated |

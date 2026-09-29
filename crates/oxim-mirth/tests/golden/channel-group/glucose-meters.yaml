@@ -1,0 +1,18 @@
+# Imported from Mirth Connect channel "Glucose meters" (9f000000-0000-4000-8000-000000000002) by oxim-mirth.
+# Migration report: 4 converted, 1 approximated, 0 unsupported item(s).
+
+id: glucose-meters
+name: Glucose meters
+enabled: true
+source:
+  type: http
+  data_type: json
+  settings: {listen: "0.0.0.0:8080", path: /poc}
+destinations:
+- id: archive
+  type: file
+  queue: {retry: {initial_delay: "60s", max_delay: "60s", multiplier: 1}}
+  settings:
+    directory: /var/lib/poc
+    filename: "{message_id}.json"
+    overwrite: true

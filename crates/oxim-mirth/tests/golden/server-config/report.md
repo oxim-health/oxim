@@ -4,9 +4,9 @@ Imported: server configuration backup (Mirth Connect 3.9.1)
 
 | Result | Items |
 |---|---|
-| converted | 18 |
+| converted | 20 |
 | approximated | 5 |
-| unsupported | 6 |
+| unsupported | 5 |
 
 Converted elements behave as in Mirth Connect. Approximated elements were converted with the difference described. Unsupported elements were left out and need attention before the channel goes live.
 
@@ -15,7 +15,7 @@ Converted elements behave as in Mirth Connect. Approximated elements were conver
 | Mirth channel | OXIM channel | File | Converted | Approximated | Unsupported |
 |---|---|---|---|---|---|
 | Lab Feed | `lab-feed` | `lab-feed.yaml` | 5 | 2 | 0 |
-| Lab Feed | `lab-feed-2` | `lab-feed-2.yaml` | 9 | 3 | 1 |
+| Lab Feed | `lab-feed-2` | `lab-feed-2.yaml` | 11 | 3 | 0 |
 | Warehouse Import | `warehouse-import` | `warehouse-import.yaml.draft` (draft) | 2 | 0 | 2 |
 
 ## Server-wide elements
@@ -49,13 +49,14 @@ Converted elements behave as in Mirth Connect. Approximated elements were conver
 | converted | source filter rule "Chemistry" (RuleBuilderRule) | part of one `condition` filter that joins the rules with AND and OR as Mirth does | `/serverConfiguration/channels/channel[2]/sourceConnector/filter/elements/com.mirth.connect.plugins.rulebuilder.RuleBuilderRule[1]` |
 | converted | source filter rule "Urgent" (RuleBuilderRule) | part of one `condition` filter that joins the rules with AND and OR as Mirth does | `/serverConfiguration/channels/channel[2]/sourceConnector/filter/elements/com.mirth.connect.plugins.rulebuilder.RuleBuilderRule[2]` |
 | converted | source filter rule "Or hematology" (RuleBuilderRule) | part of one `condition` filter that joins the rules with AND and OR as Mirth does | `/serverConfiguration/channels/channel[2]/sourceConnector/filter/elements/com.mirth.connect.plugins.rulebuilder.RuleBuilderRule[3]` |
-| unsupported | destination "Destination 1" (Channel Writer) | OXIM has no destination connector for Channel Writer (VmDispatcherProperties) yet; the destination was left out | `/serverConfiguration/channels/channel[2]/destinationConnectors/connector[1]` |
+| converted | destination "Destination 1" (Channel Writer) | OXIM channel destination to the imported channel warehouse-import | `/serverConfiguration/channels/channel[2]/destinationConnectors/connector[1]/properties` |
+| converted | destination "Destination 1" (Channel Writer) | OXIM queues every message durably; like Mirth without a queue, delivery gives up after 1 attempt(s), 10s apart | `/serverConfiguration/channels/channel[2]/destinationConnectors/connector[1]` |
 | converted | destination "Destination 1" (TCP Sender) | OXIM tcp destination sending to 10.0.0.30:9100 | `/serverConfiguration/channels/channel[2]/destinationConnectors/connector[2]/properties` |
 | converted | destination "Destination 1" (TCP Sender) | OXIM queues every message durably; like Mirth without a queue, delivery gives up after 3 attempt(s), 1500ms apart | `/serverConfiguration/channels/channel[2]/destinationConnectors/connector[2]/properties/destinationConnectorProperties` |
 | approximated | destination "Destination 1" (File Writer) | appending messages to one file is not supported; each message is written to its own file named with the message identifier | `/serverConfiguration/channels/channel[2]/destinationConnectors/connector[3]/properties` |
 | converted | destination "Destination 1" (File Writer) | OXIM file destination writing to /var/lib/lab/journal | `/serverConfiguration/channels/channel[2]/destinationConnectors/connector[3]/properties` |
 | converted | destination "Destination 1" (File Writer) | OXIM queues every message durably; like Mirth without a queue, delivery gives up after 1 attempt(s), 10s apart | `/serverConfiguration/channels/channel[2]/destinationConnectors/connector[3]` |
-| approximated | destination chain | Mirth waits for the previous destination before "Destination 1"; OXIM delivers every destination from its own durable queue, so a destination cannot use an earlier destination's response and the order between destinations is not kept | `/serverConfiguration/channels/channel[2]/destinationConnectors` |
+| approximated | destination chain | Mirth waits for the previous destination before "Destination 1", "Destination 1"; OXIM delivers every destination from its own durable queue, so a destination cannot use an earlier destination's response and the order between destinations is not kept | `/serverConfiguration/channels/channel[2]/destinationConnectors` |
 | approximated | source response (None) | Mirth sent no response; OXIM always acknowledges HL7 messages received over MLLP after storing them | `/serverConfiguration/channels/channel[2]/sourceConnector/properties/sourceConnectorProperties/responseVariable` |
 
 ## Channel `warehouse-import` (Mirth: Warehouse Import)

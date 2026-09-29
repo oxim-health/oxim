@@ -180,6 +180,18 @@ pub(crate) fn source(connector: &Element, notes: &mut Notes<'_>) -> Option<Conne
     match class_name(connector) {
         "TcpReceiverProperties" => tcp_receiver(properties, notes, &label),
         "FileReceiverProperties" => file_receiver(properties, notes, &label),
+        "HttpReceiverProperties" => http_receiver(properties, notes, &label),
+        "VmReceiverProperties" => {
+            notes.converted(
+                &label,
+                &properties.location,
+                "OXIM channel source: receives what other channels' channel destinations send",
+            );
+            Some(Connector {
+                kind: "channel",
+                settings: Vec::new(),
+            })
+        }
         class => {
             notes.unsupported(
                 &label,
@@ -406,6 +418,7 @@ pub(crate) fn destination(
         "TcpDispatcherProperties" => tcp_dispatcher(properties, notes, label),
         "FileDispatcherProperties" => file_dispatcher(properties, notes, label),
         "HttpDispatcherProperties" => http_dispatcher(properties, notes, label),
+        "VmDispatcherProperties" => channel_writer(properties, notes, label),
         class => {
             notes.unsupported(
                 label,
@@ -419,6 +432,137 @@ pub(crate) fn destination(
             None
         }
     }
+}
+
+fn http_receiver(properties: &Element, notes: &mut Notes<'_>, label: &str) -> Option<Connector> {
+    let listener = properties.child("listenerConnectorProperties");
+    let host = listener
+        .and_then(|l| setting(notes, label, l, "host"))
+        .unwrap_or_else(|| "0.0.0.0".to_owned());
+    let Some(port) = listener.and_then(|l| setting(notes, label, l, "port")) else {
+        notes.unsupported(label, &properties.location, "the listener has no port");
+        return None;
+    };
+    let listen = address(&host, &port);
+    let mut settings = vec![("listen".to_owned(), Yaml::str(listen.clone()))];
+    if let Some(path) = setting(notes, label, properties, "contextPath")
+        .map(|path| path.trim().to_owned())
+        .filter(|path| !path.is_empty() && path != "/")
+    {
+        let path = if path.starts_with('/') {
+            path
+        } else {
+            format!("/{path}")
+        };
+        settings.push(("path".into(), Yaml::str(path)));
+    }
+    if let Some(status) = properties.value("responseStatusCode").map(str::trim)
+        && !status.is_empty()
+    {
+        match status.parse::<u16>() {
+            Ok(code) if (200..300).contains(&code) => {
+                settings.push(("status".into(), Yaml::Int(i64::from(code))));
+            }
+            _ => notes.approximated(
+                label,
+                &properties.location,
+                format!(
+                    "the response status {status:?} is not a fixed 2xx code; OXIM answers 200, \
+                     or 503 when the message could not be stored"
+                ),
+            ),
+        }
+    }
+    notes.approximated(
+        label,
+        &properties.location,
+        "OXIM accepts POST and PUT requests (set `methods` for others) and stores the raw body",
+    );
+    if properties.flag("xmlBody") == Some(true) {
+        notes.approximated(
+            label,
+            &properties.location,
+            "Mirth converted requests to XML with headers and parameters; OXIM stores the body \
+             and records the method, path and content type as metadata",
+        );
+    }
+    if properties.flag("parseMultipart") == Some(true) {
+        notes.approximated(
+            label,
+            &properties.location,
+            "multipart bodies are stored as received",
+        );
+    }
+    if let Some(auth) = properties.find(&["pluginProperties"])
+        && auth
+            .children
+            .iter()
+            .any(|plugin| plugin.name.contains("httpauth") && !plugin.name.contains("NoneHttpAuth"))
+    {
+        notes.approximated(
+            label,
+            &auth.location,
+            "authentication settings were not copied; set `auth` (basic or bearer) on the source",
+        );
+    }
+    template_note(properties, "responseContentType", notes, label);
+    charset_note(properties, notes, label);
+    notes.converted(
+        label,
+        &properties.location,
+        format!("OXIM http source listening on {listen}"),
+    );
+    Some(Connector {
+        kind: "http",
+        settings,
+    })
+}
+
+fn channel_writer(properties: &Element, notes: &mut Notes<'_>, label: &str) -> Option<Connector> {
+    let target = properties.value("channelId").map(str::trim).unwrap_or("");
+    if target.is_empty() || target.eq_ignore_ascii_case("none") {
+        notes.unsupported(
+            label,
+            &properties.location,
+            "the channel writer has no target channel; the destination was left out",
+        );
+        return None;
+    }
+    let channel = match notes.channel_id(target) {
+        Some(id) => {
+            notes.converted(
+                label,
+                &properties.location,
+                format!("OXIM channel destination to the imported channel {id}"),
+            );
+            id
+        }
+        None => {
+            let placeholder = format!(
+                "mirth-{}",
+                target
+                    .chars()
+                    .filter(char::is_ascii_alphanumeric)
+                    .take(8)
+                    .collect::<String>()
+                    .to_ascii_lowercase()
+            );
+            notes.approximated(
+                label,
+                &properties.location,
+                format!(
+                    "the target channel {target} is not part of this export; the destination \
+                     names {placeholder}, replace it with the target's OXIM channel id"
+                ),
+            );
+            placeholder
+        }
+    };
+    template_note(properties, "channelTemplate", notes, label);
+    Some(Connector {
+        kind: "channel",
+        settings: vec![("channel".to_owned(), Yaml::str(channel))],
+    })
 }
 
 fn millis_setting(properties: &Element, name: &str) -> Option<String> {
