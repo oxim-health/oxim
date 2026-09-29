@@ -14,6 +14,7 @@ oxim-astm = { path = "../crates/oxim-astm" }
 oxim-formats = { path = "../crates/oxim-formats" }
 oxim-hl7 = { path = "../crates/oxim-hl7" }
 oxim-mllp = { path = "../crates/oxim-mllp" }
+oxim-poct1a = { path = "../crates/oxim-poct1a" }
 
 # Not part of the main workspace: fuzzing needs a nightly toolchain.
 [workspace]
@@ -71,6 +72,20 @@ bench = false
 [[bin]]
 name = "formats_delimited"
 path = "fuzz_targets/formats_delimited.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "poct1a_stream"
+path = "fuzz_targets/poct1a_stream.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "poct1a_message"
+path = "fuzz_targets/poct1a_message.rs"
 test = false
 doc = false
 bench = false

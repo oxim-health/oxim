@@ -26,6 +26,7 @@ jobs:
         with:
           components: rustfmt
       - run: cargo fmt --all --check
+      - run: cargo fmt --all --check --manifest-path fuzz/Cargo.toml
 
   clippy:
     name: Clippy (${{ matrix.os }})
@@ -90,7 +91,16 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          [hl7_message, hl7_edit, mllp_decoder, astm_frames, astm_message, formats_json, formats_xml, formats_delimited]
+          - hl7_message
+          - hl7_edit
+          - mllp_decoder
+          - astm_frames
+          - astm_message
+          - formats_json
+          - formats_xml
+          - formats_delimited
+          - poct1a_stream
+          - poct1a_message
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
