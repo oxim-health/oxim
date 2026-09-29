@@ -1,0 +1,36 @@
+{
+  "resourceType": "Bundle",
+  "id": "response-1",
+  "type": "transaction-response",
+  "entry": [
+    {
+      "response": {
+        "status": "201 Created",
+        "location": "Patient/example-1/_history/1",
+        "etag": "W/\"1\""
+      }
+    },
+    {
+      "response": {
+        "status": "200 OK",
+        "location": "Specimen/example-2/_history/3"
+      }
+    },
+    {
+      "response": {
+        "status": "422 Unprocessable Entity",
+        "outcome": {
+          "resourceType": "OperationOutcome",
+          "issue": [
+            {
+              "severity": "error",
+              "code": "required",
+              "diagnostics": "Observation.status: minimum required = 1",
+              "expression": ["Observation.status"]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
