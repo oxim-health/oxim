@@ -32,6 +32,7 @@ pub(crate) fn build(settings: &Settings) -> Components {
     oxim_connectors::register(&mut registry);
     oxim_connectors_db::register(&mut registry);
     oxim_connectors_messaging::register(&mut registry);
+    oxim_connectors_remote::register(&mut registry);
     oxim_mapping::register(&mut registry);
     oxim_fhir::register(&mut registry);
     oxim_dicom::register_with(

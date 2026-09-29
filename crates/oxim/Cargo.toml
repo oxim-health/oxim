@@ -25,6 +25,7 @@ oxim-connectors.workspace = true
 oxim-alert.workspace = true
 oxim-connectors-db.workspace = true
 oxim-connectors-messaging.workspace = true
+oxim-connectors-remote.workspace = true
 oxim-core.workspace = true
 oxim-dicom.workspace = true
 oxim-devices.workspace = true

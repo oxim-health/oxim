@@ -16,6 +16,7 @@ publish = false
 [workspace.dependencies]
 argon2 = "0.5"
 async-nats = { version = "0.50", default-features = false, features = ["ring", "jetstream", "nkeys", "server_2_10"] }
+async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
 async-trait = "0.1"
 lapin = { version = "4.12", default-features = false, features = ["rustls--ring", "rustls-native-certs", "tokio"] }
 mysql_async = { version = "0.37", default-features = false, features = ["default-rustls-ring"] }
@@ -50,6 +51,8 @@ fs4 = "1.1"
 fastrand = "2"
 http = "1"
 http-body-util = "0.1"
+lettre = { version = "0.11", default-features = false, features = ["builder", "hostname", "ring", "rustls-native-certs", "smtp-transport", "tokio1", "tokio1-rustls"] }
+mail-parser = "0.11"
 hyper = { version = "1", features = ["client", "http1", "server"] }
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "ring", "tls12", "logging"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "http1", "server", "tokio"] }
@@ -58,6 +61,8 @@ quick-xml = "0.42"
 regex = "1.11"
 ring = "0.17"
 rquickjs = { version = "0.14", default-features = false, features = ["std", "parallel"] }
+russh = { version = "0.63", default-features = false, features = ["ring", "flate2"] }
+russh-sftp = "3"
 rusqlite = { version = "0.40", features = ["bundled"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-native-certs = "0.8"
@@ -65,6 +70,7 @@ rustls-pki-types = { version = "1", features = ["std"] }
 serde = { version = "1.0", features = ["derive"] }
 serde-saphyr = "1.3"
 serde_json = "1.0"
+suppaftp = { version = "12", default-features = false, features = ["deprecated", "tokio-rustls-ring"] }
 thiserror = "2"
 tokio = { version = "1.53", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 tokio-serial = { version = "5.5", default-features = false }
@@ -80,6 +86,7 @@ oxim-capture = { path = "crates/oxim-capture" }
 oxim-connectors = { path = "crates/oxim-connectors" }
 oxim-connectors-db = { path = "crates/oxim-connectors-db" }
 oxim-connectors-messaging = { path = "crates/oxim-connectors-messaging" }
+oxim-connectors-remote = { path = "crates/oxim-connectors-remote" }
 oxim-core = { path = "crates/oxim-core" }
 oxim-devices = { path = "crates/oxim-devices" }
 oxim-fhir = { path = "crates/oxim-fhir" }
@@ -100,6 +107,7 @@ oxim-store = { path = "crates/oxim-store" }
 oxim-transform = { path = "crates/oxim-transform" }
 oxim-x12 = { path = "crates/oxim-x12" }
 
+rand = { version = "0.10", features = ["thread_rng"] }
 rcgen = "0.14"
 proptest = "1.5"
 tempfile = "3"
