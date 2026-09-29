@@ -42,6 +42,11 @@ tracing-subscriber.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows-service.workspace = true
 
+[features]
+default = ["embedded-ui"]
+# Serve the web UI built in `ui/dist` from the binary (see ui/README.md).
+embedded-ui = ["oxim-server/embedded-ui"]
+
 [dev-dependencies]
 tempfile.workspace = true
 tokio = { workspace = true, features = ["io-util", "net"] }

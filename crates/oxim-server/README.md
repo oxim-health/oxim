@@ -8,11 +8,11 @@ The REST API of [OXIM](../../README.md): authentication, channels, messages with
 - **Masking:** callers without `view_unmasked` get patient-identifying values replaced by `***`, keeping the structure — HL7 v2 (PID-2…23 identifiers, names, birth date, address, phones, SSN, …; NK1, MRG, GT1, IN1/IN2, PV1-19/50), ASTM patient records, `patient`/`subject` objects of normalized and FHIR JSON, and POCT1-A `PT.*` values. Content that cannot be masked reliably is withheld. Message metadata values are masked too.
 - **Audit:** every content view (masked or not), break-glass access, erasure, channel, table, user and token change and every login is recorded in the message store's audit trail. Content is only returned after its audit event is stored.
 - **Hardening:** security headers (CSP, `nosniff`, `DENY` framing, no referrer, HSTS with TLS), `Cache-Control: no-store` for the API, request body limit (4 MiB), request timeout (30 s), bounded event streams, JSON errors `{"error": {"code", "message"}}`.
-- **Web UI:** static files from `server.ui_dir` with `index.html` as the fallback for client-side routes; without it, `/` returns a JSON note.
+- **Web UI:** with the `embedded-ui` feature (on by default in the `oxim` program) the built UI in `ui/dist` (or the directory named by `OXIM_UI_DIST` at build time) is compiled into the binary and served with its content types, `Cache-Control: public, max-age=31536000, immutable` for content-hashed `assets/` and `no-cache` for everything else, and `index.html` for client-side routes. `server.ui_dir` overrides the embedded files. A build without the UI answers browsers with a page explaining how to add it and other clients with a JSON note at `/`. Building OXIM never needs Node: when `ui/dist` is missing the build simply embeds nothing.
 
 ## API
 
-The OpenAPI 3.1 description is served at `/api/v1/openapi.json`; a test checks that every documented operation is routed and requires authentication.
+The OpenAPI 3.1 description is served at `/api/v1/openapi.json`, with JSON schemas for every request and response body. Tests check that every documented operation is routed and requires authentication, that real responses match their schemas, and that the copy in `ui/openapi.json` (from which the web UI generates its TypeScript types) is current; refresh it with `OXIM_BLESS=1 cargo test -p oxim-server --test openapi`, then `npm run gen:api` in `ui/`.
 
 | Method | Path | Permission | Purpose |
 |---|---|---|---|
