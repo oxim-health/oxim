@@ -12,6 +12,9 @@ channels_dir: /etc/oxim/channels
 # Code and routing tables referenced by channel steps.
 tables_dir: /etc/oxim/tables
 
+# JavaScript files referenced by `script` steps.
+scripts_dir: /etc/oxim/scripts
+
 log:
   level: info          # or e.g. "info,oxim_connectors=debug"; OXIM_LOG overrides
   format: text         # text or json; standard output goes to the journal
@@ -26,3 +29,12 @@ retention:
 reload:
   enabled: true
   interval: 5s
+
+# Web server: REST API, Prometheus metrics (/metrics) and the web UI. It
+# starts once a user exists: run `oxim users create-admin` first.
+server:
+  enabled: true
+  listen: 127.0.0.1:8080   # local only; use e.g. 0.0.0.0:8443 with tls for remote access
+  # tls: {cert: /etc/oxim/tls/oxim.pem, key: /etc/oxim/tls/oxim-key.pem}
+  session_idle: 30m        # log out after this long without activity
+  session_max: 12h         # log out this long after login

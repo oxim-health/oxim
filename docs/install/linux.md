@@ -35,7 +35,18 @@ systemctl status oxim
 journalctl -u oxim -f
 ```
 
-Tables referenced by channels (code tables, routing tables) go to `/etc/oxim/tables`. Channel files are picked up while the service runs.
+Tables referenced by channels (code tables, routing tables) go to `/etc/oxim/tables`, scripts to `/etc/oxim/scripts`. Channel files are picked up while the service runs.
+
+## First user
+
+The web UI and REST API ([oxim-server](../../crates/oxim-server)) start once a user exists. Create the first administrator; the password is asked for without echo (or read from standard input with `--password-stdin`):
+
+```sh
+sudo -u oxim oxim -c /etc/oxim/oxim.yaml users create-admin --username admin
+sudo systemctl restart oxim
+```
+
+The server listens on `127.0.0.1:8080` by default. For access from other machines set `server.listen` (for example `0.0.0.0:8443`) together with `server.tls`, or put a reverse proxy with TLS in front of it.
 
 ## The service
 

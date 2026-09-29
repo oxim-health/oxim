@@ -24,6 +24,8 @@ services:
       # Send your own ASTM messages from the host, for example with
       # `oxim-sim astm send --to 127.0.0.1:5100`.
       - "127.0.0.1:5100:5100"
+      # Web UI and REST API (see demo/oxim.yaml for creating the first user).
+      - "127.0.0.1:8080:8080"
     depends_on:
       - lis
     restart: unless-stopped

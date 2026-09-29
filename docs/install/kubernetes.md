@@ -41,6 +41,17 @@ tables:
     GLU,1520,Glucose
 ```
 
+## First user
+
+The web UI and REST API listen on the `http` Service port (8080). Create the first administrator in the pod, then restart it:
+
+```sh
+kubectl -n oxim exec -it oxim-0 -- oxim -c /etc/oxim/oxim.yaml users create-admin --username admin
+kubectl -n oxim delete pod oxim-0
+```
+
+Expose the `http` port through an Ingress with TLS rather than a public LoadBalancer.
+
 ## Values
 
 | Value | Default | Meaning |

@@ -17,3 +17,10 @@ retention:
 reload:
   enabled: true
   interval: 5s
+
+# The web UI and REST API, published on 127.0.0.1:8080 by compose.yaml.
+# Create the first user with:
+#   docker compose -f deploy/docker/compose.yaml exec oxim oxim -c /etc/oxim/oxim.yaml users create-admin
+server:
+  enabled: true
+  listen: 0.0.0.0:8080
