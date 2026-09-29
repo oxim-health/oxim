@@ -32,7 +32,72 @@ use oxim_model::{ChannelId, ConnectorId, DataType, Envelope, MessageId, Timestam
 use oxim_store::{Delivery, MessageQuery, MessageRecord, SqliteStore};
 use tokio::net::TcpListener;
 
+pub mod pacs;
+
 pub const CT_IMAGE_STORAGE: &str = uids::CT_IMAGE_STORAGE;
+
+/// A test PKI written as PEM files: a CA, a server certificate for
+/// `localhost` and a client certificate.
+pub struct Pki {
+    pub dir: tempfile::TempDir,
+    pub ca: std::path::PathBuf,
+    pub server_cert: std::path::PathBuf,
+    pub server_key: std::path::PathBuf,
+    pub client_cert: std::path::PathBuf,
+    pub client_key: std::path::PathBuf,
+}
+
+impl Pki {
+    pub fn new() -> Self {
+        use rcgen::{
+            BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer,
+            KeyPair, KeyUsagePurpose,
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let write = |name: &str, text: String| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, text).unwrap();
+            path
+        };
+        let ca_key = KeyPair::generate().unwrap();
+        let mut ca_params = CertificateParams::new(Vec::<String>::new()).unwrap();
+        ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        ca_params
+            .distinguished_name
+            .push(DnType::CommonName, "OXIM Test CA");
+        ca_params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+        let ca_cert = ca_params.self_signed(&ca_key).unwrap();
+        let issuer = Issuer::new(ca_params, ca_key);
+        let leaf = |names: Vec<String>, usage: ExtendedKeyUsagePurpose| {
+            let key = KeyPair::generate().unwrap();
+            let mut params = CertificateParams::new(names).unwrap();
+            params.extended_key_usages = vec![usage];
+            let cert = params.signed_by(&key, &issuer).unwrap();
+            (cert.pem(), key.serialize_pem())
+        };
+        let (server_cert, server_key) = leaf(
+            vec!["localhost".into()],
+            ExtendedKeyUsagePurpose::ServerAuth,
+        );
+        let (client_cert, client_key) = leaf(
+            vec!["modality.test".into()],
+            ExtendedKeyUsagePurpose::ClientAuth,
+        );
+        Self {
+            ca: write("ca.pem", ca_cert.pem()),
+            server_cert: write("server.pem", server_cert),
+            server_key: write("server-key.pem", server_key),
+            client_cert: write("client.pem", client_cert),
+            client_key: write("client-key.pem", client_key),
+            dir,
+        }
+    }
+}
+
+/// A path for YAML, with forward slashes.
+pub fn yaml_path(path: &std::path::Path) -> String {
+    format!("'{}'", path.display().to_string().replace('\\', "/"))
+}
 
 /// A synthetic object of one study.
 #[derive(Debug, Clone)]
@@ -168,8 +233,15 @@ impl DestinationConnector for Recorder {
 
 /// An engine with the DICOM components plus a `recorder` destination.
 pub async fn engine(recorder: Arc<Recorder>) -> Engine {
+    engine_with(recorder, |_| {}).await
+}
+
+/// An engine with the DICOM components, a `recorder` destination and what
+/// `extra` registers.
+pub async fn engine_with(recorder: Arc<Recorder>, extra: impl FnOnce(&mut Registry)) -> Engine {
     let mut registry = Registry::new();
     oxim_dicom::register(&mut registry);
+    extra(&mut registry);
     registry.add_destination("recorder", move |_| {
         Ok(recorder.clone() as Arc<dyn DestinationConnector>)
     });
@@ -234,6 +306,8 @@ pub fn scu(port: u16, calling: &str, called: &str) -> DicomScu {
         timeout: oxim_core::config::DurationText(Duration::from_secs(10)),
         max_pdu_length: 16_384,
         transcode: true,
+        storage_commitment: None,
+        tls: None,
     })
     .unwrap()
 }

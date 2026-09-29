@@ -1,5 +1,7 @@
-//! DIMSE command sets (PS3.7): the C-ECHO and C-STORE messages OXIM
-//! exchanges, encoded in Implicit VR Little Endian as PS3.7 requires.
+//! DIMSE command sets (PS3.7): the composite (C-ECHO, C-STORE, C-FIND,
+//! C-MOVE, C-GET) and normalized (N-CREATE, N-SET, N-ACTION,
+//! N-EVENT-REPORT) messages OXIM exchanges, encoded in Implicit VR Little
+//! Endian as PS3.7 requires.
 
 use std::collections::BTreeMap;
 
@@ -14,10 +16,38 @@ pub mod command_field {
     pub const C_STORE_RQ: u16 = 0x0001;
     /// C-STORE response.
     pub const C_STORE_RSP: u16 = 0x8001;
+    /// C-GET request.
+    pub const C_GET_RQ: u16 = 0x0010;
+    /// C-GET response.
+    pub const C_GET_RSP: u16 = 0x8010;
+    /// C-FIND request.
+    pub const C_FIND_RQ: u16 = 0x0020;
+    /// C-FIND response.
+    pub const C_FIND_RSP: u16 = 0x8020;
+    /// C-MOVE request.
+    pub const C_MOVE_RQ: u16 = 0x0021;
+    /// C-MOVE response.
+    pub const C_MOVE_RSP: u16 = 0x8021;
     /// C-ECHO request.
     pub const C_ECHO_RQ: u16 = 0x0030;
     /// C-ECHO response.
     pub const C_ECHO_RSP: u16 = 0x8030;
+    /// N-EVENT-REPORT request.
+    pub const N_EVENT_REPORT_RQ: u16 = 0x0100;
+    /// N-EVENT-REPORT response.
+    pub const N_EVENT_REPORT_RSP: u16 = 0x8100;
+    /// N-SET request.
+    pub const N_SET_RQ: u16 = 0x0120;
+    /// N-SET response.
+    pub const N_SET_RSP: u16 = 0x8120;
+    /// N-ACTION request.
+    pub const N_ACTION_RQ: u16 = 0x0130;
+    /// N-ACTION response.
+    pub const N_ACTION_RSP: u16 = 0x8130;
+    /// N-CREATE request.
+    pub const N_CREATE_RQ: u16 = 0x0140;
+    /// N-CREATE response.
+    pub const N_CREATE_RSP: u16 = 0x8140;
     /// C-CANCEL request, which has no response.
     pub const C_CANCEL_RQ: u16 = 0x0FFF;
 }
@@ -26,12 +56,16 @@ pub mod command_field {
 pub mod element {
     /// Affected SOP Class UID (0000,0002).
     pub const AFFECTED_SOP_CLASS_UID: u16 = 0x0002;
+    /// Requested SOP Class UID (0000,0003).
+    pub const REQUESTED_SOP_CLASS_UID: u16 = 0x0003;
     /// Command Field (0000,0100).
     pub const COMMAND_FIELD: u16 = 0x0100;
     /// Message ID (0000,0110).
     pub const MESSAGE_ID: u16 = 0x0110;
     /// Message ID Being Responded To (0000,0120).
     pub const MESSAGE_ID_BEING_RESPONDED_TO: u16 = 0x0120;
+    /// Move Destination (0000,0600).
+    pub const MOVE_DESTINATION: u16 = 0x0600;
     /// Priority (0000,0700).
     pub const PRIORITY: u16 = 0x0700;
     /// Command Data Set Type (0000,0800).
@@ -42,14 +76,65 @@ pub mod element {
     pub const ERROR_COMMENT: u16 = 0x0902;
     /// Affected SOP Instance UID (0000,1000).
     pub const AFFECTED_SOP_INSTANCE_UID: u16 = 0x1000;
+    /// Requested SOP Instance UID (0000,1001).
+    pub const REQUESTED_SOP_INSTANCE_UID: u16 = 0x1001;
+    /// Event Type ID (0000,1002).
+    pub const EVENT_TYPE_ID: u16 = 0x1002;
+    /// Action Type ID (0000,1008).
+    pub const ACTION_TYPE_ID: u16 = 0x1008;
+    /// Number of Remaining Sub-operations (0000,1020).
+    pub const REMAINING_SUBOPERATIONS: u16 = 0x1020;
+    /// Number of Completed Sub-operations (0000,1021).
+    pub const COMPLETED_SUBOPERATIONS: u16 = 0x1021;
+    /// Number of Failed Sub-operations (0000,1022).
+    pub const FAILED_SUBOPERATIONS: u16 = 0x1022;
+    /// Number of Warning Sub-operations (0000,1023).
+    pub const WARNING_SUBOPERATIONS: u16 = 0x1023;
+    /// Move Originator Application Entity Title (0000,1030).
+    pub const MOVE_ORIGINATOR_AE_TITLE: u16 = 0x1030;
+    /// Move Originator Message ID (0000,1031).
+    pub const MOVE_ORIGINATOR_MESSAGE_ID: u16 = 0x1031;
 }
 
 /// DIMSE status codes used by OXIM.
 pub mod status {
     /// Success.
     pub const SUCCESS: u16 = 0x0000;
+    /// Warning: sub-operations complete, one or more failures or warnings
+    /// (C-MOVE, C-GET).
+    pub const SUBOPERATIONS_WITH_FAILURES: u16 = 0xB000;
+    /// Failure: no such attribute (N-SET).
+    pub const NO_SUCH_ATTRIBUTE: u16 = 0x0105;
+    /// Failure: invalid attribute value.
+    pub const INVALID_ATTRIBUTE_VALUE: u16 = 0x0106;
     /// Failure: processing failure.
     pub const PROCESSING_FAILURE: u16 = 0x0110;
+    /// Failure: duplicate SOP instance (N-CREATE).
+    pub const DUPLICATE_SOP_INSTANCE: u16 = 0x0111;
+    /// Failure: no such SOP instance.
+    pub const NO_SUCH_SOP_INSTANCE: u16 = 0x0112;
+    /// Failure: no such event type.
+    pub const NO_SUCH_EVENT_TYPE: u16 = 0x0113;
+    /// Failure: no such action type (N-ACTION).
+    pub const NO_SUCH_ACTION_TYPE: u16 = 0x0123;
+    /// Failure: missing attribute (N-CREATE).
+    pub const MISSING_ATTRIBUTE: u16 = 0x0120;
+    /// Failure: missing attribute value.
+    pub const MISSING_ATTRIBUTE_VALUE: u16 = 0x0121;
+    /// Cancel: the operation was cancelled.
+    pub const CANCEL: u16 = 0xFE00;
+    /// Pending: more responses follow.
+    pub const PENDING: u16 = 0xFF00;
+    /// Pending: matches follow, some optional keys were not supported
+    /// (C-FIND).
+    pub const PENDING_WITH_WARNINGS: u16 = 0xFF01;
+    /// Refused: move destination unknown (C-MOVE).
+    pub const MOVE_DESTINATION_UNKNOWN: u16 = 0xA801;
+    /// Failure: identifier does not match SOP class (C-FIND, C-MOVE,
+    /// C-GET).
+    pub const IDENTIFIER_DOES_NOT_MATCH_SOP_CLASS: u16 = 0xA900;
+    /// Failure: unable to process (C-FIND, C-MOVE, C-GET).
+    pub const UNABLE_TO_PROCESS: u16 = 0xC000;
     /// Failure: SOP class not supported.
     pub const SOP_CLASS_NOT_SUPPORTED: u16 = 0x0122;
     /// Failure: unrecognized operation.
@@ -171,6 +256,135 @@ impl Command {
             .with_u16(element::COMMAND_DATA_SET_TYPE, NO_DATA_SET)
     }
 
+    /// A C-FIND request with medium priority; the identifier follows.
+    pub fn c_find_rq(message_id: u16, sop_class_uid: &str) -> Self {
+        Self::new()
+            .with_uid(element::AFFECTED_SOP_CLASS_UID, sop_class_uid)
+            .with_u16(element::COMMAND_FIELD, command_field::C_FIND_RQ)
+            .with_u16(element::MESSAGE_ID, message_id)
+            .with_u16(element::PRIORITY, 0)
+            .with_u16(element::COMMAND_DATA_SET_TYPE, 0x0000)
+    }
+
+    /// A C-MOVE request with medium priority to `destination`; the
+    /// identifier follows.
+    pub fn c_move_rq(message_id: u16, sop_class_uid: &str, destination: &str) -> Self {
+        Self::new()
+            .with_uid(element::AFFECTED_SOP_CLASS_UID, sop_class_uid)
+            .with_u16(element::COMMAND_FIELD, command_field::C_MOVE_RQ)
+            .with_u16(element::MESSAGE_ID, message_id)
+            .with_u16(element::PRIORITY, 0)
+            .with_u16(element::COMMAND_DATA_SET_TYPE, 0x0000)
+            .with_text(element::MOVE_DESTINATION, destination)
+    }
+
+    /// A C-GET request with medium priority; the identifier follows.
+    pub fn c_get_rq(message_id: u16, sop_class_uid: &str) -> Self {
+        Self::new()
+            .with_uid(element::AFFECTED_SOP_CLASS_UID, sop_class_uid)
+            .with_u16(element::COMMAND_FIELD, command_field::C_GET_RQ)
+            .with_u16(element::MESSAGE_ID, message_id)
+            .with_u16(element::PRIORITY, 0)
+            .with_u16(element::COMMAND_DATA_SET_TYPE, 0x0000)
+    }
+
+    /// A C-CANCEL request for the operation `message_id`.
+    pub fn c_cancel_rq(message_id: u16) -> Self {
+        Self::new()
+            .with_u16(element::COMMAND_FIELD, command_field::C_CANCEL_RQ)
+            .with_u16(element::MESSAGE_ID_BEING_RESPONDED_TO, message_id)
+            .with_u16(element::COMMAND_DATA_SET_TYPE, NO_DATA_SET)
+    }
+
+    /// An N-CREATE request; the attribute list follows.
+    pub fn n_create_rq(message_id: u16, sop_class_uid: &str, sop_instance_uid: &str) -> Self {
+        Self::new()
+            .with_uid(element::AFFECTED_SOP_CLASS_UID, sop_class_uid)
+            .with_u16(element::COMMAND_FIELD, command_field::N_CREATE_RQ)
+            .with_u16(element::MESSAGE_ID, message_id)
+            .with_u16(element::COMMAND_DATA_SET_TYPE, 0x0000)
+            .with_uid(element::AFFECTED_SOP_INSTANCE_UID, sop_instance_uid)
+    }
+
+    /// An N-SET request; the modification list follows.
+    pub fn n_set_rq(message_id: u16, sop_class_uid: &str, sop_instance_uid: &str) -> Self {
+        Self::new()
+            .with_uid(element::REQUESTED_SOP_CLASS_UID, sop_class_uid)
+            .with_u16(element::COMMAND_FIELD, command_field::N_SET_RQ)
+            .with_u16(element::MESSAGE_ID, message_id)
+            .with_u16(element::COMMAND_DATA_SET_TYPE, 0x0000)
+            .with_uid(element::REQUESTED_SOP_INSTANCE_UID, sop_instance_uid)
+    }
+
+    /// An N-ACTION request; the action information follows.
+    pub fn n_action_rq(
+        message_id: u16,
+        sop_class_uid: &str,
+        sop_instance_uid: &str,
+        action_type: u16,
+    ) -> Self {
+        Self::new()
+            .with_uid(element::REQUESTED_SOP_CLASS_UID, sop_class_uid)
+            .with_u16(element::COMMAND_FIELD, command_field::N_ACTION_RQ)
+            .with_u16(element::MESSAGE_ID, message_id)
+            .with_u16(element::COMMAND_DATA_SET_TYPE, 0x0000)
+            .with_uid(element::REQUESTED_SOP_INSTANCE_UID, sop_instance_uid)
+            .with_u16(element::ACTION_TYPE_ID, action_type)
+    }
+
+    /// An N-EVENT-REPORT request; the event information follows.
+    pub fn n_event_report_rq(
+        message_id: u16,
+        sop_class_uid: &str,
+        sop_instance_uid: &str,
+        event_type: u16,
+    ) -> Self {
+        Self::new()
+            .with_uid(element::AFFECTED_SOP_CLASS_UID, sop_class_uid)
+            .with_u16(element::COMMAND_FIELD, command_field::N_EVENT_REPORT_RQ)
+            .with_u16(element::MESSAGE_ID, message_id)
+            .with_u16(element::COMMAND_DATA_SET_TYPE, 0x0000)
+            .with_uid(element::AFFECTED_SOP_INSTANCE_UID, sop_instance_uid)
+            .with_u16(element::EVENT_TYPE_ID, event_type)
+    }
+
+    /// Marks the command as followed by a data set.
+    pub fn with_data_set(self) -> Self {
+        self.with_u16(element::COMMAND_DATA_SET_TYPE, 0x0000)
+    }
+
+    /// Sets the sub-operation counters of a C-MOVE or C-GET response.
+    pub fn with_suboperations(
+        self,
+        remaining: u16,
+        completed: u16,
+        failed: u16,
+        warning: u16,
+    ) -> Self {
+        self.with_u16(element::REMAINING_SUBOPERATIONS, remaining)
+            .with_u16(element::COMPLETED_SUBOPERATIONS, completed)
+            .with_u16(element::FAILED_SUBOPERATIONS, failed)
+            .with_u16(element::WARNING_SUBOPERATIONS, warning)
+    }
+
+    /// The SOP class UID a request names: Affected SOP Class UID, or
+    /// Requested SOP Class UID for N-SET, N-GET and N-ACTION.
+    pub fn sop_class_uid(&self) -> Option<String> {
+        self.text(element::AFFECTED_SOP_CLASS_UID)
+            .filter(|uid| !uid.is_empty())
+            .or_else(|| self.text(element::REQUESTED_SOP_CLASS_UID))
+            .filter(|uid| !uid.is_empty())
+    }
+
+    /// The SOP instance UID a request names: Affected SOP Instance UID, or
+    /// Requested SOP Instance UID.
+    pub fn sop_instance_uid(&self) -> Option<String> {
+        self.text(element::AFFECTED_SOP_INSTANCE_UID)
+            .filter(|uid| !uid.is_empty())
+            .or_else(|| self.text(element::REQUESTED_SOP_INSTANCE_UID))
+            .filter(|uid| !uid.is_empty())
+    }
+
     /// A C-STORE request with medium priority; the data set follows.
     pub fn c_store_rq(message_id: u16, sop_class_uid: &str, sop_instance_uid: &str) -> Self {
         Self::new()
@@ -196,12 +410,29 @@ impl Command {
             )
             .with_u16(element::COMMAND_DATA_SET_TYPE, NO_DATA_SET)
             .with_u16(element::STATUS, status);
-        for uid in [
-            element::AFFECTED_SOP_CLASS_UID,
-            element::AFFECTED_SOP_INSTANCE_UID,
+        // N-SET, N-GET and N-ACTION requests name the instance with the
+        // Requested UIDs; their responses carry them as Affected UIDs.
+        for (affected, requested) in [
+            (
+                element::AFFECTED_SOP_CLASS_UID,
+                element::REQUESTED_SOP_CLASS_UID,
+            ),
+            (
+                element::AFFECTED_SOP_INSTANCE_UID,
+                element::REQUESTED_SOP_INSTANCE_UID,
+            ),
         ] {
-            if let Some(value) = request.elements.get(&uid) {
-                response.elements.insert(uid, value.clone());
+            if let Some(value) = request
+                .elements
+                .get(&affected)
+                .or_else(|| request.elements.get(&requested))
+            {
+                response.elements.insert(affected, value.clone());
+            }
+        }
+        for copied in [element::ACTION_TYPE_ID, element::EVENT_TYPE_ID] {
+            if let Some(value) = request.elements.get(&copied) {
+                response.elements.insert(copied, value.clone());
             }
         }
         if let Some(comment) = comment {
