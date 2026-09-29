@@ -125,8 +125,24 @@ The request body is the message. Once it is stored the client gets `status` with
 | `timeout` | `30s` | Limit for the whole request |
 | `ca_file` | none | PEM file with extra trusted certificate authorities |
 | `max_response_size` | 16 MiB | Largest accepted response body |
+| `oauth2` | none | OAuth 2.0 client credentials: `token_url`, `client_id`, `client_secret_env`, optional `scope`, `audience`, `client_auth` (`basic` or `body`), `tls`, `timeout` |
 
 HTTPS uses rustls with the operating system's trusted certificates plus `ca_file`. Every request carries an `X-OXIM-Message-Id` header. `2xx` delivers the message and the body is stored as the response; `408`, `429`, `3xx`, `5xx` and transport errors are retried; other `4xx` responses fail the delivery.
+
+With `oauth2`, every request carries a bearer token obtained with the client credentials grant and reused until shortly before it expires. A `401` discards the token and the delivery is retried with a new one; token endpoint failures are temporary.
+
+```yaml
+destinations:
+  - id: fhir
+    type: http
+    settings:
+      url: https://fhir.hospital.example/r4/Bundle
+      oauth2:
+        token_url: https://login.hospital.example/oauth2/token
+        client_id: oxim
+        client_secret_env: OXIM_FHIR_CLIENT_SECRET
+        scope: system/*.write
+```
 
 ## In-process connectors
 

@@ -70,7 +70,8 @@ pub struct ServerTlsSettings {
     pub handshake_timeout: DurationText,
 }
 
-/// TLS settings of a sender.
+/// TLS settings of a sender. The default trusts the operating system's
+/// certificate authorities, like `tls: {}`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClientTlsSettings {
@@ -89,6 +90,18 @@ pub struct ClientTlsSettings {
     /// Name to verify the server certificate against.
     #[serde(default)]
     pub server_name: Option<String>,
+}
+
+impl Default for ClientTlsSettings {
+    fn default() -> Self {
+        Self {
+            ca_file: None,
+            system_roots: true,
+            cert_file: None,
+            key_file: None,
+            server_name: None,
+        }
+    }
 }
 
 fn config_error(message: String) -> EngineError {
@@ -138,6 +151,13 @@ fn provider() -> Arc<rustls::crypto::CryptoProvider> {
 
 /// Builds the acceptor of a listener.
 pub(crate) fn acceptor(settings: &ServerTlsSettings) -> Result<TlsAcceptor, EngineError> {
+    Ok(TlsAcceptor::from(Arc::new(server_config(settings)?)))
+}
+
+/// The rustls configuration of a listener: its certificate and key and,
+/// with `client_ca_file`, client certificate verification. For connectors
+/// in other crates that accept TLS connections.
+pub fn server_config(settings: &ServerTlsSettings) -> Result<rustls::ServerConfig, EngineError> {
     let builder = rustls::ServerConfig::builder_with_provider(provider())
         .with_safe_default_protocol_versions()
         .map_err(|e| config_error(e.to_string()))?;
@@ -164,7 +184,7 @@ pub(crate) fn acceptor(settings: &ServerTlsSettings) -> Result<TlsAcceptor, Engi
             private_key(&settings.key_file)?,
         )
         .map_err(|e| config_error(format!("certificate and key: {e}")))?;
-    Ok(TlsAcceptor::from(Arc::new(config)))
+    Ok(config)
 }
 
 /// A connector for a sender, with the name to verify.
@@ -197,6 +217,31 @@ fn host_of(target: &str) -> &str {
 
 /// Builds the TLS client of a sender connecting to `target`.
 pub(crate) fn client(settings: &ClientTlsSettings, target: &str) -> Result<Client, EngineError> {
+    Ok(Client {
+        connector: TlsConnector::from(Arc::new(client_config(settings)?)),
+        server_name: server_name(settings, target)?,
+    })
+}
+
+/// The name a sender verifies the server certificate of `target` against:
+/// `server_name` when set, otherwise the host part of `target`
+/// (`host:port`, `[v6]:port` or a bare host).
+pub fn server_name(
+    settings: &ClientTlsSettings,
+    target: &str,
+) -> Result<ServerName<'static>, EngineError> {
+    let name = settings
+        .server_name
+        .clone()
+        .unwrap_or_else(|| host_of(target).to_owned());
+    ServerName::try_from(name.clone())
+        .map_err(|e| config_error(format!("invalid server name {name:?}: {e}")))
+}
+
+/// The rustls configuration of a sender: the trusted authorities and an
+/// optional client certificate. For connectors in other crates that open
+/// TLS connections.
+pub fn client_config(settings: &ClientTlsSettings) -> Result<rustls::ClientConfig, EngineError> {
     let mut store = RootCertStore::empty();
     if settings.system_roots {
         let native = rustls_native_certs::load_native_certs();
@@ -232,16 +277,7 @@ pub(crate) fn client(settings: &ClientTlsSettings, target: &str) -> Result<Clien
             ));
         }
     };
-    let name = settings
-        .server_name
-        .clone()
-        .unwrap_or_else(|| host_of(target).to_owned());
-    let server_name = ServerName::try_from(name.clone())
-        .map_err(|e| config_error(format!("invalid server name {name:?}: {e}")))?;
-    Ok(Client {
-        connector: TlsConnector::from(Arc::new(config)),
-        server_name,
-    })
+    Ok(config)
 }
 
 impl Client {

@@ -159,8 +159,8 @@ struct Entry {
 }
 
 /// Whether `name` matches `pattern` with `*` and `?` wildcards, ignoring
-/// ASCII case.
-pub(crate) fn matches(pattern: &str, name: &str) -> bool {
+/// ASCII case. Shared with the remote file connectors.
+pub fn matches(pattern: &str, name: &str) -> bool {
     let pattern: Vec<char> = pattern.chars().map(|c| c.to_ascii_lowercase()).collect();
     let name: Vec<char> = name.chars().map(|c| c.to_ascii_lowercase()).collect();
     let (mut p, mut n) = (0, 0);
@@ -383,7 +383,7 @@ pub struct FileDestination {
 }
 
 /// The usual file extension of a data type.
-pub(crate) fn extension(data_type: Option<DataType>) -> &'static str {
+pub fn extension(data_type: Option<DataType>) -> &'static str {
     match data_type {
         Some(DataType::Hl7V2) => "hl7",
         Some(DataType::Astm) => "astm",
@@ -415,8 +415,10 @@ fn compact_timestamp(id: MessageId) -> String {
         .unwrap_or_else(|| "19700101T000000Z".to_owned())
 }
 
-/// Renders a file name template.
-pub(crate) fn render(
+/// Renders a file name template (`{channel}`, `{message_id}`,
+/// `{destination}`, `{timestamp}`, `{extension}`), rejecting names that are
+/// not plain file names. Shared with the remote file connectors.
+pub fn render(
     template: &str,
     channel: &str,
     destination: &str,

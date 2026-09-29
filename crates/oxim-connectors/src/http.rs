@@ -12,12 +12,15 @@
 //! | `timeout` | `30s` | Limit for the whole request, including the response body |
 //! | `ca_file` | none | PEM file with extra trusted certificate authorities, for internal CAs |
 //! | `max_response_size` | 16 MiB | Largest accepted response body |
+//! | `oauth2` | none | OAuth 2.0 client credentials; see [`oauth2`](crate::oauth2) |
 //!
 //! HTTPS uses rustls with the operating system's trusted certificates plus
 //! `ca_file`. A `2xx` response delivers the message and its body is stored
 //! as the response. `408`, `429`, `5xx` and transport errors are retried
 //! according to the destination's retry policy; other `4xx` responses fail
-//! the delivery because repeating the same request cannot succeed.
+//! the delivery because repeating the same request cannot succeed. With
+//! `oauth2`, each request carries a bearer token and a `401` discards the
+//! token and is retried.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -44,6 +47,7 @@ use serde::Deserialize;
 use tracing::debug;
 
 use crate::net::{DEFAULT_MAX_MESSAGE, settings};
+use crate::oauth2::{OAuth2Client, OAuth2Settings};
 
 fn default_method() -> String {
     "POST".to_owned()
@@ -81,10 +85,13 @@ pub struct HttpDestinationSettings {
     /// Largest accepted response body.
     #[serde(default = "default_max_response_size")]
     pub max_response_size: usize,
+    /// OAuth 2.0 client credentials.
+    #[serde(default)]
+    pub oauth2: Option<OAuth2Settings>,
 }
 
 /// The usual media type of a data type.
-pub(crate) fn content_type(data_type: Option<DataType>) -> &'static str {
+pub fn content_type(data_type: Option<DataType>) -> &'static str {
     match data_type {
         Some(DataType::Hl7V2) => "x-application/hl7-v2+er7",
         Some(DataType::Fhir) => "application/fhir+json",
@@ -99,8 +106,10 @@ pub(crate) fn content_type(data_type: Option<DataType>) -> &'static str {
     }
 }
 
-/// How an HTTP status answers a delivery.
-pub(crate) fn classify(status: StatusCode, body: &[u8]) -> Result<Option<Vec<u8>>, SendError> {
+/// How an HTTP status answers a delivery: `2xx` delivers with the body as
+/// the response; `408`, `429`, `3xx` and `5xx` are temporary failures;
+/// other statuses are permanent.
+pub fn classify(status: StatusCode, body: &[u8]) -> Result<Option<Vec<u8>>, SendError> {
     if status.is_success() {
         return Ok(Some(body.to_vec()));
     }
@@ -126,6 +135,7 @@ pub struct HttpDestination {
     timeout: Duration,
     max_response_size: usize,
     client: Client<HttpsConnector<HttpConnector>, Full<Bytes>>,
+    oauth2: Option<Arc<OAuth2Client>>,
 }
 
 impl std::fmt::Debug for HttpDestination {
@@ -209,6 +219,7 @@ impl HttpDestination {
             .enable_http1()
             .build();
         let client = Client::builder(TokioExecutor::new()).build(connector);
+        let oauth2 = settings.oauth2.map(OAuth2Client::new).transpose()?;
         Ok(Self {
             uri,
             method,
@@ -217,6 +228,7 @@ impl HttpDestination {
             timeout: settings.timeout.0,
             max_response_size: settings.max_response_size,
             client,
+            oauth2,
         })
     }
 
@@ -233,6 +245,9 @@ impl HttpDestination {
         for (name, value) in &self.headers {
             builder = builder.header(name, value);
         }
+        if let Some(oauth2) = &self.oauth2 {
+            builder = builder.header(http::header::AUTHORIZATION, oauth2.authorization().await?);
+        }
         let request = builder
             .body(Full::new(Bytes::from(delivery.payload.clone())))
             .map_err(|e| SendError::permanent(format!("cannot build the request: {e}")))?;
@@ -246,6 +261,17 @@ impl HttpDestination {
             .await
             .map_err(|e| SendError::temporary(format!("reading the response failed: {e}")))?
             .to_bytes();
+        if status == StatusCode::UNAUTHORIZED
+            && let Some(oauth2) = &self.oauth2
+        {
+            // The token may have been revoked or expired early: fetch a new
+            // one on the next attempt.
+            oauth2.invalidate().await;
+            return Err(SendError::temporary(format!(
+                "{} rejected the OAuth 2.0 token",
+                self.uri
+            )));
+        }
         classify(status, &body)
     }
 }
@@ -311,6 +337,7 @@ mod tests {
             timeout: default_timeout(),
             ca_file: None,
             max_response_size: default_max_response_size(),
+            oauth2: None,
         };
         assert!(HttpDestination::new(base("https://lis.example/api/results")).is_ok());
         assert!(HttpDestination::new(base("ftp://lis.example/")).is_err());

@@ -19,7 +19,10 @@
 //! | `timer` | A message at a fixed interval | | [`internal`] |
 //!
 //! `mllp`, `tcp` and the `http` source support TLS and mutual TLS through a
-//! `tls` settings block; see [`tls`].
+//! `tls` settings block; see [`tls`]. The `http` destination supports OAuth
+//! 2.0 client credentials; see [`oauth2`]. Remote file, email and SOAP
+//! connectors live in the `oxim-connectors-remote` crate, which reuses
+//! [`tls`], [`oauth2`] and the file name helpers of [`file`](mod@file).
 
 pub mod astm;
 pub mod file;
@@ -28,6 +31,7 @@ pub mod http_listener;
 pub mod internal;
 pub mod mllp;
 mod net;
+pub mod oauth2;
 pub mod poct1a;
 pub mod serial;
 pub mod tcp;
