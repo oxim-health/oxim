@@ -69,7 +69,10 @@ docker load -i oxim-<version>.tar
 
 ## Building a bundle
 
+Build the web UI first so the binary embeds it (Node 22 or newer), then the binary:
+
 ```sh
+(cd ui && npm ci && npm run build)
 cargo build --release --locked -p oxim --target x86_64-unknown-linux-gnu
 deploy/offline/build-bundle.sh --version 1.0.0 --target x86_64-unknown-linux-gnu \
   --binary target/x86_64-unknown-linux-gnu/release/oxim
