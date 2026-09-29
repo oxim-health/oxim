@@ -9,7 +9,7 @@ use oxim_model::{
     ChannelId, ConnectorId, Envelope, MessageId, MessageIdGenerator, MessageStatus, Timestamp,
 };
 use oxim_store::{DeliveryOutcome, MessageQuery, MessageStore, Processed, Stage};
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::{Notify, mpsc, watch};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
@@ -67,6 +67,8 @@ struct Inner {
     options: EngineOptions,
     channels: tokio::sync::Mutex<BTreeMap<ChannelId, Running>>,
     shutdown: CancellationToken,
+    /// Whether sources are paused (maintenance mode).
+    paused: watch::Sender<bool>,
 }
 
 /// The integration engine.
@@ -125,8 +127,28 @@ impl Engine {
                 options,
                 channels: tokio::sync::Mutex::new(BTreeMap::new()),
                 shutdown: CancellationToken::new(),
+                paused: watch::Sender::new(false),
             }),
         })
+    }
+
+    /// Stops every source (maintenance mode): listeners close and pollers
+    /// stop, so senders see refused connections and retry later, while
+    /// processing and delivery of stored messages go on. Channels deployed
+    /// while paused start with their source stopped. The pause is not
+    /// persisted.
+    pub fn pause_sources(&self) {
+        self.inner.paused.send_replace(true);
+    }
+
+    /// Starts the sources stopped by [`Engine::pause_sources`] again.
+    pub fn resume_sources(&self) {
+        self.inner.paused.send_replace(false);
+    }
+
+    /// Whether sources are paused.
+    pub fn sources_paused(&self) -> bool {
+        *self.inner.paused.borrow()
     }
 
     /// The store handle, for queries and operator actions.
@@ -243,8 +265,9 @@ impl Engine {
         }
         tasks.spawn(run_source(
             source,
-            SourceContext::new(shared, cancel.clone()),
+            shared,
             cancel.clone(),
+            inner.paused.subscribe(),
             inner.options.source_restart_delay,
         ));
         tasks.spawn(requeue_unprocessed(
@@ -355,19 +378,52 @@ impl Engine {
     }
 }
 
+/// Runs a channel's source until the channel stops, restarting it after
+/// failures, and stopping it while sources are paused.
 async fn run_source(
     source: Arc<dyn SourceConnector>,
-    context: SourceContext,
+    shared: Arc<ChannelShared>,
     cancel: CancellationToken,
+    mut paused: watch::Receiver<bool>,
     restart_delay: Duration,
 ) {
+    let channel = shared.channel.clone();
+    let mut watching = true;
     loop {
-        match source.run(context.clone()).await {
-            Ok(()) if cancel.is_cancelled() => return,
-            Ok(()) => warn!(channel = %context.channel(), "source connector stopped; restarting"),
-            Err(e) => {
-                error!(channel = %context.channel(), error = %e, "source connector failed; restarting")
+        while watching && *paused.borrow_and_update() {
+            tokio::select! {
+                () = cancel.cancelled() => return,
+                changed = paused.changed() => if changed.is_err() { watching = false },
             }
+        }
+        // Each run gets its own token, so a pause stops the source alone.
+        let run_cancel = cancel.child_token();
+        let context = SourceContext::new(shared.clone(), run_cancel.clone());
+        let run = source.run(context);
+        tokio::pin!(run);
+        let mut pausing = false;
+        let result = loop {
+            tokio::select! {
+                result = &mut run => break result,
+                changed = paused.changed(), if watching && !pausing => match changed {
+                    Err(_) => watching = false,
+                    Ok(()) => if *paused.borrow_and_update() {
+                        pausing = true;
+                        run_cancel.cancel();
+                    },
+                },
+            }
+        };
+        if cancel.is_cancelled() {
+            return;
+        }
+        if pausing {
+            info!(%channel, "source paused");
+            continue;
+        }
+        match result {
+            Ok(()) => warn!(%channel, "source connector stopped; restarting"),
+            Err(e) => error!(%channel, error = %e, "source connector failed; restarting"),
         }
         tokio::select! {
             () = cancel.cancelled() => return,

@@ -6,16 +6,21 @@
 //! [`oxim_auth::AuthStore`], then either mount [`router`] yourself (for
 //! example in tests, with `tower::ServiceExt::oneshot`) or call [`serve`].
 //!
+//! The operations endpoints cover alerts, the device registry, backups
+//! ([`backup`]), channel version history ([`history`]) and maintenance mode.
+//!
 //! Every endpoint except login and the OpenAPI document requires a session
 //! (cookie or bearer) or an API token. Callers without the
 //! `view_unmasked` permission see patient-identifying values replaced by
 //! `***`; every content view is audited.
 
 mod audit;
+pub mod backup;
 mod caller;
 mod error;
 mod extract;
 mod files;
+pub mod history;
 mod mask;
 mod routes;
 mod state;
@@ -38,7 +43,7 @@ pub use caller::{CSRF_COOKIE, CSRF_HEADER, Caller, SESSION_COOKIE};
 pub use error::{ApiError, ApiResult};
 pub use mask::{MASK, Masked, mask};
 pub use routes::API_PREFIX;
-pub use state::{AppState, ServerConfig, TlsFiles};
+pub use state::{AppState, BackupSettings, ServerConfig, Services, TlsFiles};
 
 /// The OpenAPI 3.1 description of the API.
 pub fn openapi() -> serde_json::Value {

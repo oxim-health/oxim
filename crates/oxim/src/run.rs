@@ -15,6 +15,10 @@ use oxim_store::{PrunePolicy, SqliteStore};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
+use oxim_server::Services;
+use oxim_server::backup::InstanceLock;
+use oxim_server::history::{Change, ChannelHistory};
+
 use crate::CliResult;
 use crate::components;
 use crate::settings::Settings;
@@ -23,6 +27,18 @@ use crate::settings::Settings;
 pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) -> CliResult<()> {
     std::fs::create_dir_all(&settings.data_dir)
         .map_err(|e| format!("cannot create {}: {e}", settings.data_dir.display()))?;
+    // One engine per data directory; `oxim restore` checks this lock.
+    let _lock = InstanceLock::acquire(&settings.data_dir).map_err(|e| match e {
+        oxim_server::backup::BackupError::Running(dir) => {
+            format!("another OXIM process is running with the data directory {dir}")
+        }
+        other => other.to_string(),
+    })?;
+    let history_path = settings.history_path();
+    let history = Arc::new(
+        ChannelHistory::open(&history_path)
+            .map_err(|e| format!("cannot open {}: {e}", history_path.display()))?,
+    );
     let database = settings.database_path();
     let store = SqliteStore::open(&database)
         .map_err(|e| format!("cannot open {}: {e}", database.display()))?;
@@ -52,7 +68,11 @@ pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) 
         channels = %settings.channels_dir.display(),
         "OXIM started"
     );
-    let web = crate::web::start(&settings, &engine).await;
+    let services = Services::new()
+        .with_alerts(alerts.clone())
+        .with_devices(devices.clone())
+        .with_history(history.clone());
+    let web = crate::web::start(&settings, &engine, services).await;
     let web = match web {
         Ok(web) => web,
         Err(e) => {
@@ -61,7 +81,7 @@ pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) 
         }
     };
 
-    let mut watcher = ChannelWatcher::new(settings.channels_dir.clone());
+    let mut watcher = ChannelWatcher::new(settings.channels_dir.clone()).with_history(history);
     watcher.sync(&engine).await;
     let reload = settings.reload.enabled.then(|| {
         let engine = engine.clone();
@@ -74,6 +94,7 @@ pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) 
         })
     });
     let retention = tokio::spawn(retention_loop(engine.clone(), settings.clone()));
+    let scheduled_backups = tokio::spawn(crate::backups::schedule_loop(settings.clone()));
     let alerting = CancellationToken::new();
     let alert_task = tokio::spawn(
         alerts.run(
@@ -99,6 +120,7 @@ pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) 
         reload.abort();
     }
     retention.abort();
+    scheduled_backups.abort();
     alerting.cancel();
     let _ = alert_task.await;
     engine.shutdown().await;
@@ -184,6 +206,8 @@ pub(crate) struct ChannelWatcher {
     directory: PathBuf,
     /// Last seen text and the channel it defined, per file.
     files: BTreeMap<PathBuf, (String, Option<ChannelId>)>,
+    /// Where deployed versions are recorded.
+    history: Option<Arc<ChannelHistory>>,
 }
 
 impl ChannelWatcher {
@@ -191,6 +215,22 @@ impl ChannelWatcher {
         Self {
             directory,
             files: BTreeMap::new(),
+            history: None,
+        }
+    }
+
+    /// Records every changed or removed channel file in `history`.
+    pub(crate) fn with_history(mut self, history: Arc<ChannelHistory>) -> Self {
+        self.history = Some(history);
+        self
+    }
+
+    fn remember(&self, engine: &Engine, channel: &ChannelId, change: Change, yaml: Option<&str>) {
+        if let Some(history) = &self.history
+            && let Err(e) =
+                history.record(channel.as_str(), change, yaml, "file", engine.clock().now())
+        {
+            warn!(%channel, error = %e, "cannot record the channel version");
         }
     }
 
@@ -226,6 +266,7 @@ impl ChannelWatcher {
             if let Some((_, Some(channel))) = self.files.remove(&path) {
                 info!(%channel, file = %path.display(), "channel file removed");
                 undeploy(engine, &channel).await;
+                self.remember(engine, &channel, Change::Deleted, None);
             }
         }
 
@@ -259,6 +300,7 @@ impl ChannelWatcher {
                 undeploy(engine, previous).await;
             }
             let id = config.id.clone();
+            self.remember(engine, &id, Change::Saved, Some(&text));
             if config.enabled {
                 match engine.redeploy(config).await {
                     Ok(()) => {
@@ -281,5 +323,56 @@ async fn undeploy(engine: &Engine, channel: &ChannelId) {
     match engine.undeploy(channel).await {
         Ok(()) | Err(EngineError::NotDeployed(_)) => {}
         Err(e) => error!(%channel, error = %e, "cannot undeploy channel"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use oxim_core::{EngineOptions, Registry};
+    use oxim_store::SqliteStore;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn the_watcher_records_channel_versions() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::start(
+            Box::new(SqliteStore::open_in_memory().unwrap()),
+            Registry::new(),
+            Arc::new(SystemClock),
+            EngineOptions::default(),
+        )
+        .await
+        .unwrap();
+        let history = Arc::new(ChannelHistory::open_in_memory().unwrap());
+        let mut watcher =
+            ChannelWatcher::new(dir.path().to_path_buf()).with_history(history.clone());
+        // Disabled channels need no component types.
+        let path = dir.path().join("lab.yaml");
+        std::fs::write(
+            &path,
+            "id: lab\nenabled: false\nsource: {type: none, data_type: raw}\n",
+        )
+        .unwrap();
+        watcher.sync(&engine).await;
+        watcher.sync(&engine).await;
+        std::fs::write(
+            &path,
+            "id: lab\nenabled: false\nsource: {type: none, data_type: hl7v2}\n",
+        )
+        .unwrap();
+        watcher.sync(&engine).await;
+        std::fs::remove_file(&path).unwrap();
+        watcher.sync(&engine).await;
+        let versions = history.list("lab").unwrap();
+        assert_eq!(
+            versions
+                .iter()
+                .map(|v| (v.version, v.change))
+                .collect::<Vec<_>>(),
+            [(3, Change::Deleted), (2, Change::Saved), (1, Change::Saved)]
+        );
+        assert!(versions.iter().all(|v| v.actor == "file"));
+        engine.shutdown().await;
     }
 }

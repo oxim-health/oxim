@@ -44,6 +44,45 @@ pub(crate) struct Settings {
     /// Alert rules and notification targets.
     #[serde(default)]
     pub(crate) alerts: oxim_alert::AlertSettings,
+    /// Backups.
+    #[serde(default)]
+    pub(crate) backups: BackupSettings,
+    /// The file these settings were read from.
+    #[serde(skip)]
+    pub(crate) config_file: Option<PathBuf>,
+}
+
+/// Backups (`oxim backup`, the web UI and the daily schedule).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BackupSettings {
+    /// Where backups go; `backups` in the data directory by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) dir: Option<PathBuf>,
+    /// How many backups in that directory are kept.
+    #[serde(default = "backups_keep_default")]
+    pub(crate) keep: usize,
+    /// Take a backup every day at this time (`HH:MM`) while OXIM runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) schedule: Option<String>,
+    /// UTC offset of `schedule` in minutes (`180` for UTC+3).
+    #[serde(default)]
+    pub(crate) utc_offset: i16,
+}
+
+fn backups_keep_default() -> usize {
+    7
+}
+
+impl Default for BackupSettings {
+    fn default() -> Self {
+        Self {
+            dir: None,
+            keep: backups_keep_default(),
+            schedule: None,
+            utc_offset: 0,
+        }
+    }
 }
 
 fn data_dir_default() -> PathBuf {
@@ -294,6 +333,8 @@ impl Default for Settings {
             reload: ReloadSettings::default(),
             server: ServerSettings::default(),
             alerts: oxim_alert::AlertSettings::default(),
+            backups: BackupSettings::default(),
+            config_file: None,
         }
     }
 }
@@ -307,14 +348,18 @@ impl Settings {
                 path.display()
             )
         })?;
-        let settings: Self = serde_saphyr::from_str(&text)
+        let mut settings: Self = serde_saphyr::from_str(&text)
             .map_err(|e| format!("invalid {}: {e}", path.display()))?;
-        let base = path
-            .canonicalize()
-            .ok()
-            .map(simplified)
+        if let Some(schedule) = &settings.backups.schedule {
+            crate::backups::parse_schedule(schedule)
+                .map_err(|e| format!("invalid {}: {e}", path.display()))?;
+        }
+        let canonical = path.canonicalize().ok().map(simplified);
+        let base = canonical
+            .as_ref()
             .and_then(|p| p.parent().map(Path::to_path_buf))
             .unwrap_or_else(|| PathBuf::from("."));
+        settings.config_file = canonical;
         Ok(settings.resolved(&base))
     }
 
@@ -336,6 +381,9 @@ impl Settings {
             resolve(&mut tls.key);
         }
         if let Some(directory) = &mut self.server.ui_dir {
+            resolve(directory);
+        }
+        if let Some(directory) = &mut self.backups.dir {
             resolve(directory);
         }
         for rule in &mut self.alerts.rules {
@@ -364,6 +412,19 @@ impl Settings {
     /// The message database file.
     pub(crate) fn database_path(&self) -> PathBuf {
         self.data_dir.join("oxim.db")
+    }
+
+    /// Where backups go.
+    pub(crate) fn backups_dir(&self) -> PathBuf {
+        self.backups
+            .dir
+            .clone()
+            .unwrap_or_else(|| self.data_dir.join("backups"))
+    }
+
+    /// The channel version history.
+    pub(crate) fn history_path(&self) -> PathBuf {
+        self.data_dir.join("history.db")
     }
 
     /// The lab order cache file.

@@ -5,9 +5,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use oxim_alert::AlertEngine;
 use oxim_auth::{AuthStore, LoginThrottle, SessionPolicy};
 use oxim_core::Engine;
+use oxim_devices::DeviceEnvironment;
 use oxim_model::Timestamp;
+
+use crate::history::ChannelHistory;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 
@@ -18,6 +22,15 @@ pub struct TlsFiles {
     pub cert: PathBuf,
     /// Private key (PKCS#8, PKCS#1 or SEC1).
     pub key: PathBuf,
+}
+
+/// Where backups go and how many are kept.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BackupSettings {
+    /// The backup directory.
+    pub dir: PathBuf,
+    /// How many backups are kept; older ones are deleted after a new one.
+    pub keep: usize,
 }
 
 /// Server settings.
@@ -38,6 +51,12 @@ pub struct ServerConfig {
     pub tables_dir: PathBuf,
     /// Where the databases live.
     pub data_dir: PathBuf,
+    /// Where script files live, if configured (included in backups).
+    pub scripts_dir: Option<PathBuf>,
+    /// The configuration file, if known (included in backups).
+    pub config_file: Option<PathBuf>,
+    /// Backups made through the API.
+    pub backups: BackupSettings,
     /// Whether session cookies carry the `Secure` attribute. Browsers accept
     /// secure cookies from `http://localhost`, so this stays on unless a
     /// plain-HTTP remote deployment requires otherwise (not recommended).
@@ -58,9 +77,15 @@ impl ServerConfig {
             tls: None,
             ui_dir: None,
             sessions: SessionPolicy::default(),
+            backups: BackupSettings {
+                dir: data_dir.join("backups"),
+                keep: 7,
+            },
             channels_dir,
             tables_dir,
             data_dir,
+            scripts_dir: None,
+            config_file: None,
             secure_cookies: true,
             max_body_bytes: 4 * 1024 * 1024,
             request_timeout: Duration::from_secs(30),
@@ -69,8 +94,57 @@ impl ServerConfig {
     }
 }
 
+/// Parts of a running installation the operations endpoints report on.
+/// Each is optional: without alerts or a device registry the endpoints
+/// report nothing; without history the history endpoints answer `404`.
+#[derive(Debug, Clone, Default)]
+#[non_exhaustive]
+pub struct Services {
+    /// The alert engine, for `GET /alerts`.
+    pub alerts: Option<Arc<AlertEngine>>,
+    /// The device registry, for `/devices`.
+    pub devices: Option<DeviceEnvironment>,
+    /// Channel version history, for `/channels/{id}/history`.
+    pub history: Option<Arc<ChannelHistory>>,
+}
+
+impl Services {
+    /// No services.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// With the alert engine.
+    pub fn with_alerts(mut self, alerts: Arc<AlertEngine>) -> Self {
+        self.alerts = Some(alerts);
+        self
+    }
+
+    /// With the device registry.
+    pub fn with_devices(mut self, devices: DeviceEnvironment) -> Self {
+        self.devices = Some(devices);
+        self
+    }
+
+    /// With channel version history.
+    pub fn with_history(mut self, history: Arc<ChannelHistory>) -> Self {
+        self.history = Some(history);
+        self
+    }
+}
+
+/// Maintenance mode as switched through the API.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct Maintenance {
+    pub(crate) reason: String,
+    pub(crate) by: String,
+    pub(crate) since: Timestamp,
+}
+
 pub(crate) struct Inner {
     pub(crate) engine: Engine,
+    pub(crate) services: Services,
+    pub(crate) maintenance: std::sync::Mutex<Option<Maintenance>>,
     pub(crate) auth: Arc<AuthStore>,
     pub(crate) config: ServerConfig,
     pub(crate) throttle: LoginThrottle,
@@ -98,11 +172,23 @@ impl std::fmt::Debug for AppState {
 impl AppState {
     /// Creates the state for `engine`, authenticating against `auth`.
     pub fn new(engine: Engine, auth: Arc<AuthStore>, config: ServerConfig) -> Self {
+        Self::with_services(engine, auth, config, Services::default())
+    }
+
+    /// Creates the state with the operations services of the installation.
+    pub fn with_services(
+        engine: Engine,
+        auth: Arc<AuthStore>,
+        config: ServerConfig,
+        services: Services,
+    ) -> Self {
         let now = engine.clock().now();
         let clients = config.max_event_clients.max(1);
         Self {
             inner: Arc::new(Inner {
                 engine,
+                services,
+                maintenance: std::sync::Mutex::new(None),
                 auth,
                 config,
                 throttle: LoginThrottle::default(),
