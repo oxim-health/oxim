@@ -1,6 +1,7 @@
 //! `oxim`: the OXIM clinical integration engine.
 
 mod access;
+mod backups;
 mod commands;
 mod components;
 mod import;
@@ -45,6 +46,23 @@ enum Command {
     },
     /// Check the configuration and every channel file.
     Validate,
+    /// Back up the databases and configuration files into one archive.
+    /// Safe while OXIM runs.
+    Backup {
+        /// The archive to write; by default a new file in the backup
+        /// directory (`backups.dir`), keeping the newest `backups.keep`.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Restore a backup. Stop OXIM first; replaced files are kept in the
+    /// data directory under `restore-previous-*`.
+    Restore {
+        /// The backup archive.
+        archive: PathBuf,
+        /// Restore even though OXIM seems to be running.
+        #[arg(long)]
+        force: bool,
+    },
     /// List channel files.
     Channels,
     /// Inspect and repair stored messages.
@@ -261,6 +279,10 @@ fn main() -> ExitCode {
     let result = match cli.command {
         Command::Run => run_foreground(&cli.config),
         Command::Init { dir, force } => init::init(&dir, force, &mut out),
+        Command::Backup { out: target } => settings::Settings::load(&cli.config)
+            .and_then(|settings| backups::backup(&settings, target, &mut out)),
+        Command::Restore { archive, force } => settings::Settings::load(&cli.config)
+            .and_then(|settings| backups::restore(&settings, &archive, force, &mut out)),
         Command::Validate => settings::Settings::load(&cli.config)
             .and_then(|settings| commands::validate(&settings, &mut out))
             .and_then(|invalid| {

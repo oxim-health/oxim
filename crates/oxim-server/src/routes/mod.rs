@@ -6,6 +6,7 @@ pub(crate) mod channels;
 pub(crate) mod events;
 pub(crate) mod messages;
 pub(crate) mod metrics;
+pub(crate) mod ops;
 pub(crate) mod schemas;
 pub(crate) mod tables;
 
@@ -165,6 +166,27 @@ pub(crate) const ENDPOINTS: &[Endpoint] = &[
         needs(P::EditChannels),
     )
     .status(204),
+    op(
+        "get",
+        "/api/v1/channels/{id}/history",
+        "A channel's versions, newest first",
+        needs(P::ViewChannels),
+    )
+    .response("ChannelHistory"),
+    op(
+        "get",
+        "/api/v1/channels/{id}/history/{version}",
+        "One version of a channel with its YAML",
+        needs(P::EditChannels),
+    )
+    .response("ChannelVersion"),
+    op(
+        "post",
+        "/api/v1/channels/{id}/history/{version}/restore",
+        "Write an earlier version back as the channel file; audited",
+        needs(P::EditChannels),
+    )
+    .response("ChannelRestored"),
     op(
         "post",
         "/api/v1/channels/{id}/deploy",
@@ -342,6 +364,56 @@ pub(crate) const ENDPOINTS: &[Endpoint] = &[
     )
     .response("SystemInfo"),
     op(
+        "post",
+        "/api/v1/system/maintenance",
+        "Stop or restart every source (maintenance mode); audited",
+        needs(P::ManageSystem),
+    )
+    .request("MaintenanceRequest")
+    .response("Maintenance"),
+    op(
+        "get",
+        "/api/v1/alerts",
+        "Alert rules, targets and the active alerts",
+        needs(P::ViewSystem),
+    )
+    .response("AlertOverview"),
+    op(
+        "get",
+        "/api/v1/devices",
+        "Known and declared devices with their status",
+        needs(P::ViewDashboard),
+    )
+    .response("DeviceList"),
+    op(
+        "delete",
+        "/api/v1/devices/{channel}/{device}",
+        "Remove a device from the registry; audited",
+        needs(P::DeployChannels),
+    )
+    .status(204),
+    op(
+        "get",
+        "/api/v1/backups",
+        "List backups",
+        needs(P::ManageSystem),
+    )
+    .response("BackupList"),
+    op(
+        "post",
+        "/api/v1/backups",
+        "Take a backup now; audited",
+        needs(P::ManageSystem),
+    )
+    .status(201)
+    .response("BackupCreated"),
+    op(
+        "get",
+        "/api/v1/backups/{name}",
+        "Download a backup (application/gzip); audited",
+        needs(P::ManageSystem),
+    ),
+    op(
         "get",
         "/api/v1/events",
         "Server-sent `stats` events for the dashboard",
@@ -371,6 +443,12 @@ pub(crate) fn api() -> (Router<AppState>, Router<AppState>) {
                 .put(channels::put)
                 .delete(channels::delete),
         )
+        .route("/channels/{id}/history", get(channels::versions))
+        .route("/channels/{id}/history/{version}", get(channels::version))
+        .route(
+            "/channels/{id}/history/{version}/restore",
+            post(channels::restore_version),
+        )
         .route("/channels/{id}/deploy", post(channels::deploy))
         .route("/channels/{id}/undeploy", post(channels::undeploy))
         .route("/channels/{id}/redeploy", post(channels::redeploy))
@@ -394,6 +472,12 @@ pub(crate) fn api() -> (Router<AppState>, Router<AppState>) {
         .route("/tokens/{id}", delete(admin::revoke_token))
         .route("/audit", get(admin::audit_trail))
         .route("/system", get(admin::system))
+        .route("/system/maintenance", post(ops::set_maintenance))
+        .route("/alerts", get(ops::alerts))
+        .route("/devices", get(ops::devices))
+        .route("/devices/{channel}/{device}", delete(ops::forget_device))
+        .route("/backups", get(ops::backups).post(ops::create_backup))
+        .route("/backups/{name}", get(ops::download_backup))
         .route("/openapi.json", get(openapi));
     let streaming = Router::new().route("/events", get(events::stream));
     (timed, streaming)
@@ -471,6 +555,7 @@ fn operation(endpoint: &Endpoint) -> Value {
     };
     let content_type = match endpoint.path {
         "/metrics" => Some("text/plain"),
+        "/api/v1/backups/{name}" => Some("application/gzip"),
         "/api/v1/events" => Some("text/event-stream"),
         _ if endpoint.status == 204 => None,
         _ => Some("application/json"),

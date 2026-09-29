@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use oxim_auth::{AuthStore, SessionPolicy};
 use oxim_core::Engine;
-use oxim_server::{AppState, ServerConfig, TlsFiles};
+use oxim_server::{AppState, BackupSettings, ServerConfig, Services, TlsFiles};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
@@ -35,6 +35,12 @@ pub(crate) fn server_config(settings: &Settings) -> ServerConfig {
         key: tls.key.clone(),
     });
     config.ui_dir = server.ui_dir.clone();
+    config.scripts_dir = Some(settings.scripts_dir.clone());
+    config.config_file = settings.config_file.clone();
+    config.backups = BackupSettings {
+        dir: settings.backups_dir(),
+        keep: settings.backups.keep.max(1),
+    };
     config.sessions = SessionPolicy {
         idle: server.session_idle.0,
         max: server.session_max.0,
@@ -46,7 +52,11 @@ pub(crate) fn server_config(settings: &Settings) -> ServerConfig {
 /// server does not start (there would be no way to log in); the engine
 /// runs regardless. A port that cannot be bound or unusable TLS files stop
 /// `oxim run` with an error.
-pub(crate) async fn start(settings: &Settings, engine: &Engine) -> CliResult<Option<WebServer>> {
+pub(crate) async fn start(
+    settings: &Settings,
+    engine: &Engine,
+    services: Services,
+) -> CliResult<Option<WebServer>> {
     if !settings.server.enabled {
         info!("web server disabled in the configuration");
         return Ok(None);
@@ -70,7 +80,7 @@ pub(crate) async fn start(settings: &Settings, engine: &Engine) -> CliResult<Opt
             "the web server accepts remote connections without TLS; configure server.tls"
         );
     }
-    let state = AppState::new(engine.clone(), Arc::new(auth), config);
+    let state = AppState::with_services(engine.clone(), Arc::new(auth), config, services);
     let shutdown = CancellationToken::new();
     let token = shutdown.clone();
     let task = tokio::spawn(async move {
@@ -127,7 +137,12 @@ mod tests {
         .await
         .unwrap();
 
-        assert!(start(&settings, &engine).await.unwrap().is_none());
+        assert!(
+            start(&settings, &engine, Services::new())
+                .await
+                .unwrap()
+                .is_none()
+        );
 
         AuthStore::open(settings.auth_database_path())
             .unwrap()
@@ -141,7 +156,10 @@ mod tests {
                 engine.clock().now(),
             )
             .unwrap();
-        let server = start(&settings, &engine).await.unwrap().unwrap();
+        let server = start(&settings, &engine, Services::new())
+            .await
+            .unwrap()
+            .unwrap();
         let mut stream = tokio::net::TcpStream::connect(server.address)
             .await
             .unwrap();
@@ -155,7 +173,12 @@ mod tests {
         stop(Some(server)).await;
 
         settings.server.enabled = false;
-        assert!(start(&settings, &engine).await.unwrap().is_none());
+        assert!(
+            start(&settings, &engine, Services::new())
+                .await
+                .unwrap()
+                .is_none()
+        );
         engine.shutdown().await;
     }
 }
