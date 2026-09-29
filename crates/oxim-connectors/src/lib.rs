@@ -19,7 +19,8 @@
 //! | `timer` | A message at a fixed interval | | [`internal`] |
 //!
 //! `mllp`, `tcp` and the `http` source support TLS and mutual TLS through a
-//! `tls` settings block; see [`tls`].
+//! `tls` settings block; see [`tls`]. Connector crates for databases and
+//! messaging systems reuse [`tls`] and [`values`].
 
 pub mod astm;
 pub mod file;
@@ -32,6 +33,7 @@ pub mod poct1a;
 pub mod serial;
 pub mod tcp;
 pub mod tls;
+pub mod values;
 
 /// Registers every connector of this crate.
 pub fn register(registry: &mut oxim_core::Registry) {
