@@ -2,6 +2,7 @@
 
 use oxim_core::Registry;
 use oxim_lab::LabEnvironment;
+use oxim_script::ScriptEnvironment;
 use oxim_transform::TransformEnvironment;
 
 use crate::settings::Settings;
@@ -21,6 +22,10 @@ pub(crate) fn registry(settings: &Settings) -> Registry {
     oxim_lab::register(
         &mut registry,
         LabEnvironment::new(settings.orders_path(), settings.tables_dir.clone()),
+    );
+    oxim_script::register(
+        &mut registry,
+        ScriptEnvironment::new(settings.scripts_dir.clone()),
     );
     registry
 }
