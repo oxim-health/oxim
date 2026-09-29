@@ -10,6 +10,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
+oxim-formats = { path = "../crates/oxim-formats" }
 oxim-hl7 = { path = "../crates/oxim-hl7" }
 oxim-mllp = { path = "../crates/oxim-mllp" }
 
@@ -34,6 +35,27 @@ bench = false
 [[bin]]
 name = "mllp_decoder"
 path = "fuzz_targets/mllp_decoder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "formats_json"
+path = "fuzz_targets/formats_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "formats_xml"
+path = "fuzz_targets/formats_xml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "formats_delimited"
+path = "fuzz_targets/formats_delimited.rs"
 test = false
 doc = false
 bench = false
