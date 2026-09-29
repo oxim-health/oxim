@@ -37,6 +37,7 @@ oxim-astm = { path = "crates/oxim-astm" }
 oxim-core = { path = "crates/oxim-core" }
 oxim-formats = { path = "crates/oxim-formats" }
 oxim-hl7 = { path = "crates/oxim-hl7" }
+oxim-mapping = { path = "crates/oxim-mapping" }
 oxim-mllp = { path = "crates/oxim-mllp" }
 oxim-model = { path = "crates/oxim-model" }
 oxim-poct1a = { path = "crates/oxim-poct1a" }

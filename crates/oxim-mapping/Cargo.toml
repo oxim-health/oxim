@@ -1,0 +1,32 @@
+[package]
+name = "oxim-mapping"
+description = "Mappings between HL7 v2, ASTM, POCT1-A and the OXIM normalized clinical model"
+keywords = ["hl7", "astm", "poct1a", "fhir", "laboratory"]
+categories = ["encoding"]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+encoding_rs.workspace = true
+oxim-astm.workspace = true
+oxim-core.workspace = true
+oxim-hl7.workspace = true
+oxim-model.workspace = true
+oxim-poct1a.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+oxim-store.workspace = true
+proptest.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
