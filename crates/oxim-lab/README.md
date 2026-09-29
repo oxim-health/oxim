@@ -103,6 +103,7 @@ destinations:
 | `routing` | none | a routing table; only tests routed to `device` are offered |
 | `include_resulted` | `false` | also offer tests that already have results |
 | `mark_sent` | `true` | record the offered tests as sent |
+| `on_missing` | `answer` | `ask`: leave queries for tubes the cache does not know unanswered, for a `source.response.fallback` to the LIS |
 
 HL7 analyzers that follow IHE Laboratory Analytical Workflow send `QBP^Q11` over MLLP. `hl7v2-rsp-k11` answers with `RSP^K11` (`QAK` status `OK` or `NF`). IHE LAW then expects the orders as a separate `OML^O33`, which a destination to the analyzer sends; devices that expect the orders inside the response use `include_orders: true`:
 
@@ -126,6 +127,39 @@ destinations:
 ```
 
 For each queried tube the answer holds the open tests (pending or sent) that the device performs and that the query asked for. Unknown tubes and tubes with nothing left are left out, so `astm-query-response` answers "no information" (`L|1|I`).
+
+## Asking the LIS about unknown tubes
+
+When the cache does not know a tube (the order has not arrived yet, or OXIM was installed after it was placed), the query can be passed to the LIS within the reply timeout. `answer-query` with `on_missing: ask` leaves such a query unanswered, the LIS destination receives only unanswered queries, and `source.response.fallback` turns the LIS's answer into the device's reply:
+
+```yaml
+id: chem-1
+source:
+  type: astm-tcp
+  data_type: astm
+  normalize: true
+  response:
+    mode: pipeline
+    timeout: 10s
+    encoder: {type: astm-query-response, sender: OXIM}
+    fallback:
+      destination: lis-query
+      data_type: hl7v2                 # the LIS answers RSP^K11 with the orders
+      transformers:
+        - {type: cache-orders, mark_sent: true, device: chem-1}
+        - {type: map-observations, table: lis-to-chem-1.csv}
+  settings: {listen: 0.0.0.0:5001}
+transformers:
+  - {type: answer-query, device: chem-1, routing: routing.csv, on_missing: ask}
+destinations:
+  - id: lis-query
+    type: mllp
+    filters: [{type: clinical-kind, kinds: [query]}]
+    encoder: {type: hl7v2-qbp-q11, sending_application: OXIM, receiving_application: LIS}
+    settings: {target: lis.example.org:2575}
+```
+
+The LIS gets `QBP^Q11` (IHE LAW work order query, QPD-3 the tube); its `RSP^K11` answer with PID/SPM/ORC/OBR segments is normalized into orders, cached and encoded for the analyzer. A "not found" answer (`QAK-2 NF`, no orders) gives the analyzer "no information". If the LIS does not answer within the timeout, the analyzer gets no reply and asks again; the query stays queued for the LIS and its late answer is still cached.
 
 ## Worklist download
 

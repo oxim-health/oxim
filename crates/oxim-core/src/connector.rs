@@ -9,7 +9,7 @@ use oxim_model::{
     ChannelId, ConnectorId, DataType, DeviceId, Envelope, MessageId, MessageIdGenerator,
     MessageStatus, Timestamp,
 };
-use oxim_store::{Delivery, Stage};
+use oxim_store::{Content, Delivery, Stage};
 use tokio::sync::{Notify, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
@@ -283,18 +283,20 @@ impl SourceContext {
         let envelope = self.envelope(raw, info)?;
         shared.store.receive(envelope.clone()).await?;
         // Register before processing so a fast delivery cannot be missed.
-        let watch = match (config.mode, &config.destination) {
-            (ResponseMode::Destination, Some(destination)) => Some((
-                destination.clone(),
-                shared.watches.watch(envelope.id, destination.clone()),
-            )),
+        let watched = match (config.mode, &config.destination, &config.fallback) {
+            (ResponseMode::Destination, Some(destination), _) => Some(destination.clone()),
+            (ResponseMode::Pipeline, _, Some(fallback)) => Some(fallback.destination.clone()),
             _ => None,
         };
+        let watch = watched.map(|destination| {
+            let receiver = shared.watches.watch(envelope.id, destination.clone());
+            (destination, receiver)
+        });
         Ok(PendingReply {
             shared,
             work: Pending::Process {
                 envelope: Box::new(envelope),
-                config,
+                config: Box::new(config),
                 watch,
             },
         })
@@ -307,7 +309,7 @@ enum Pending {
     /// The message is stored and waits for processing and its reply.
     Process {
         envelope: Box<Envelope>,
-        config: ResponseConfig,
+        config: Box<ResponseConfig>,
         watch: Option<(ConnectorId, oneshot::Receiver<DeliveryReport>)>,
     },
 }
@@ -356,6 +358,7 @@ impl PendingReply {
             } => (envelope, config, watch),
         };
         let id = envelope.id;
+        let original = (config.fallback.is_some()).then(|| (*envelope).clone());
         let processed = crate::engine::process_and_record(&shared, *envelope).await;
         // Mirror the store: a transformed message without queued
         // destinations is complete.
@@ -370,17 +373,90 @@ impl PendingReply {
             data_type: None,
             error: processed.error.clone(),
         };
+        if config.mode == ResponseMode::Pipeline {
+            if let Some(content) = processed
+                .contents
+                .into_iter()
+                .find(|content| content.stage == Stage::Reply)
+            {
+                if let Some((destination, _)) = &watch {
+                    shared.watches.forget(id, destination);
+                }
+                reply.data = Some(content.data);
+                reply.data_type = content.data_type;
+                return reply;
+            }
+            let Some((destination, receiver)) = watch else {
+                if reply.error.is_none() {
+                    reply.error = Some("no pipeline step produced a reply".into());
+                }
+                return reply;
+            };
+            if !processed.queue.contains(&destination) {
+                shared.watches.forget(id, &destination);
+                if reply.error.is_none() {
+                    reply.error = Some(format!(
+                        "no pipeline step produced a reply and the message was not queued for the fallback {destination}"
+                    ));
+                }
+                return reply;
+            }
+            let response = match tokio::time::timeout(config.timeout.0, receiver).await {
+                Ok(Ok(report)) if report.delivered => report.response,
+                Ok(Ok(report)) => {
+                    reply.error = Some(
+                        report
+                            .error
+                            .unwrap_or_else(|| format!("delivery to {destination} failed")),
+                    );
+                    return reply;
+                }
+                Ok(Err(_)) => {
+                    reply.error = Some("the channel stopped".into());
+                    return reply;
+                }
+                Err(_) => {
+                    shared.watches.forget(id, &destination);
+                    reply.error = Some(format!(
+                        "{destination} did not answer within {}",
+                        config.timeout
+                    ));
+                    return reply;
+                }
+            };
+            let Some(response) = response else {
+                reply.error = Some(format!("{destination} returned no response"));
+                return reply;
+            };
+            let Some(original) = original else {
+                return reply;
+            };
+            match shared.pipeline.fallback_reply(&original, &response) {
+                Ok(Some(encoded)) => {
+                    let content =
+                        Content::new(Stage::Reply, Some(encoded.data_type), encoded.data.clone());
+                    if let Err(e) = shared
+                        .store
+                        .run(move |store| store.record_content(id, &content))
+                        .await
+                    {
+                        tracing::warn!(%id, error = %e, "cannot store the fallback reply");
+                    }
+                    reply.data = Some(encoded.data);
+                    reply.data_type = Some(encoded.data_type);
+                    reply.error = None;
+                }
+                Ok(None) => {
+                    reply.error = Some(format!("the response of {destination} produced no reply"));
+                }
+                Err(e) => reply.error = Some(format!("fallback: {e}")),
+            }
+            return reply;
+        }
         match watch {
             None => {
-                if let Some(content) = processed
-                    .contents
-                    .into_iter()
-                    .find(|content| content.stage == Stage::Reply)
-                {
-                    reply.data = Some(content.data);
-                    reply.data_type = content.data_type;
-                } else if reply.error.is_none() {
-                    reply.error = Some("no pipeline step produced a reply".into());
+                if reply.error.is_none() {
+                    reply.error = Some("no reply was produced".into());
                 }
             }
             Some((destination, receiver)) => {

@@ -11,8 +11,8 @@ use crate::connector::{DestinationConnector, SourceConnector};
 use crate::document::DocumentParser;
 use crate::error::EngineError;
 use crate::pipeline::{
-    CompiledDestination, CompiledPipeline, Encoder, Filter, Normalizer, PassthroughEncoder,
-    Transformer,
+    CompiledDestination, CompiledFallback, CompiledPipeline, Encoder, Filter, Normalizer,
+    PassthroughEncoder, Transformer,
 };
 use crate::steps;
 
@@ -253,8 +253,38 @@ impl Registry {
             ),
             None => None,
         };
+        let reply_fallback = match channel
+            .source
+            .response
+            .as_ref()
+            .and_then(|response| response.fallback.as_ref())
+        {
+            Some(fallback) => {
+                let data_type = fallback.data_type.unwrap_or(channel.source.data_type);
+                let normalizer = if fallback.normalize {
+                    Some(self.normalizers.get(&data_type).cloned().ok_or_else(|| {
+                        with_channel(EngineError::Config(format!(
+                            "no normalizer is available for {data_type} (response fallback)"
+                        )))
+                    })?)
+                } else {
+                    None
+                };
+                Some(CompiledFallback {
+                    destination: fallback.destination.clone(),
+                    parser: DocumentParser::new(data_type, fallback.format.as_ref())
+                        .map_err(with_channel)?,
+                    normalizer,
+                    transformers: self
+                        .transformers(&fallback.transformers)
+                        .map_err(with_channel)?,
+                })
+            }
+            None => None,
+        };
         Ok(CompiledPipeline {
             reply_encoder,
+            reply_fallback,
             parser: DocumentParser::new(channel.source.data_type, channel.source.format.as_ref())
                 .map_err(with_channel)?,
             normalizer,

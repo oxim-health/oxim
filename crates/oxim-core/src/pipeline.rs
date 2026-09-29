@@ -116,6 +116,22 @@ pub struct CompiledPipeline {
     /// Encodes the reply for the sender after the channel transformers,
     /// when the channel answers with `source.response.encoder`.
     pub reply_encoder: Option<Arc<dyn Encoder>>,
+    /// Turns a destination's response into the reply when the pipeline
+    /// produced none (`source.response.fallback`).
+    pub reply_fallback: Option<CompiledFallback>,
+}
+
+/// The compiled `source.response.fallback`.
+#[derive(Debug, Clone)]
+pub struct CompiledFallback {
+    /// The destination whose response is used.
+    pub destination: ConnectorId,
+    /// Parses the response.
+    pub parser: DocumentParser,
+    /// Maps the response to the normalized model, when enabled.
+    pub normalizer: Option<Arc<dyn Normalizer>>,
+    /// Applied to the response before the reply encoder.
+    pub transformers: Vec<Arc<dyn Transformer>>,
 }
 
 fn errored(error: StepError) -> Processed {
@@ -158,6 +174,48 @@ fn run_transformers(
 }
 
 impl CompiledPipeline {
+    /// Turns `response`, the answer of the fallback destination to the
+    /// message `envelope`, into the reply for the sender: it is parsed,
+    /// normalized, transformed and encoded with the reply encoder. Returns
+    /// `None` when no step and no encoder produced a reply.
+    pub fn fallback_reply(
+        &self,
+        envelope: &Envelope,
+        response: &[u8],
+    ) -> Result<Option<Encoded>, StepError> {
+        let Some(fallback) = &self.reply_fallback else {
+            return Ok(None);
+        };
+        let document = fallback.parser.parse(response)?;
+        let clinical = match &fallback.normalizer {
+            Some(normalizer) => Some(
+                normalizer
+                    .normalize(&document)
+                    .map_err(|e| StepError::new("fallback normalize", e.to_string()))?,
+            ),
+            None => None,
+        };
+        let mut context = MessageContext {
+            envelope: envelope.clone(),
+            document,
+            clinical,
+            variables: BTreeMap::new(),
+            response: None,
+        };
+        run_transformers(&fallback.transformers, &mut context, "fallback ")?;
+        if context.response.is_none()
+            && let Some(encoder) = &self.reply_encoder
+            && encoder.handles(&context)
+        {
+            context.response = Some(
+                encoder
+                    .encode(&context)
+                    .map_err(|e| StepError::new("reply", e.to_string()))?,
+            );
+        }
+        Ok(context.response)
+    }
+
     /// Runs `envelope` through the pipeline and returns what the store
     /// records: the final status, the contents of every stage and the
     /// destinations to queue. Step failures produce status `Error` so the

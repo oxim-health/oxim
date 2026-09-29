@@ -819,6 +819,29 @@ impl MessageStore for SqliteStore {
         Ok(counts)
     }
 
+    fn record_content(&mut self, id: MessageId, content: &Content) -> StoreResult<()> {
+        if content.stage == Stage::Raw {
+            return Err(StoreError::InvalidState(
+                "the raw content cannot be replaced".into(),
+            ));
+        }
+        let changed = self.conn.execute(
+            "INSERT OR REPLACE INTO contents (message_id, stage, destination, data_type, data)
+             SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM messages WHERE id = ?1)",
+            params![
+                id_bytes(id),
+                content.stage.as_str(),
+                content.destination.as_ref().map_or("", ConnectorId::as_str),
+                content.data_type.map(DataType::as_str),
+                content.data,
+            ],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::MessageNotFound(id));
+        }
+        Ok(())
+    }
+
     fn record_audit(&mut self, event: &AuditEvent) -> StoreResult<()> {
         self.conn.execute(
             "INSERT INTO audit_events (at, action, actor, message_id, channel, detail)

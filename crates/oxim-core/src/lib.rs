@@ -37,8 +37,8 @@ mod store_actor;
 
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use config::{
-    ChannelConfig, DestinationConfig, ResponseConfig, ResponseMode, Settings, SourceConfig,
-    StepConfig,
+    ChannelConfig, DestinationConfig, FallbackConfig, ResponseConfig, ResponseMode, Settings,
+    SourceConfig, StepConfig,
 };
 pub use connector::{
     DestinationConnector, PendingReply, Reply, SourceConnector, SourceContext, SubmitInfo,
@@ -47,8 +47,8 @@ pub use document::{Document, DocumentParser};
 pub use engine::{Engine, EngineOptions};
 pub use error::{ConnectorError, EngineError, SendError, StepError};
 pub use pipeline::{
-    CompiledDestination, CompiledPipeline, Encoded, Encoder, Filter, MessageContext, Normalizer,
-    PassthroughEncoder, Transformer,
+    CompiledDestination, CompiledFallback, CompiledPipeline, Encoded, Encoder, Filter,
+    MessageContext, Normalizer, PassthroughEncoder, Transformer,
 };
 pub use registry::Registry;
 pub use store_actor::StoreHandle;
