@@ -128,6 +128,29 @@ The request body is the message. Once it is stored the client gets `status` with
 
 HTTPS uses rustls with the operating system's trusted certificates plus `ca_file`. Every request carries an `X-OXIM-Message-Id` header. `2xx` delivers the message and the body is stored as the response; `408`, `429`, `3xx`, `5xx` and transport errors are retried; other `4xx` responses fail the delivery.
 
+## In-process connectors
+
+### `channel` (source and destination)
+
+Passes messages from one channel to another inside the same OXIM process, for example to split a flow into a receiving channel and several processing channels. The source has no settings; the destination names the receiving channel:
+
+```yaml
+destinations:
+  - id: to-processing
+    type: channel
+    settings: {channel: processing}
+```
+
+A delivery succeeds once the receiving channel has stored the message durably; while that channel is not deployed, the delivery is retried according to the retry policy. The received message's correlation identifier is the sending message's identifier, and its `channel.from` and `channel.message` metadata name the sender, so a message can be traced end to end across channels.
+
+### `timer` (source)
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `interval` | required | Time between messages, at least `10ms` |
+| `payload` | empty | Text of each message |
+| `immediately` | `false` | Produce the first message at start instead of after one interval |
+
 ## Laboratory connectors
 
 ### `astm-tcp` (source and destination)
