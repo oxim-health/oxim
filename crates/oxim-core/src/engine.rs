@@ -16,9 +16,11 @@ use tracing::{debug, error, info, warn};
 
 use crate::clock::Clock;
 use crate::config::{ChannelConfig, RetryPolicy};
-use crate::connector::{ChannelShared, DestinationConnector, Job, SourceConnector, SourceContext};
+use crate::connector::{
+    ChannelShared, DeliveryReport, DeliveryWatches, DestinationConnector, Job, SourceConnector,
+    SourceContext,
+};
 use crate::error::EngineError;
-use crate::pipeline::CompiledPipeline;
 use crate::registry::Registry;
 use crate::store_actor::StoreHandle;
 
@@ -202,15 +204,22 @@ impl Engine {
                 .collect(),
         );
 
-        tasks.spawn(process_jobs(
-            channel.clone(),
+        let watches = Arc::new(DeliveryWatches::default());
+        let shared = Arc::new(ChannelShared {
+            channel: channel.clone(),
+            connector: config.source.id.clone(),
+            data_type: config.source.data_type,
+            store: inner.store.clone(),
+            clock: inner.clock.clone(),
+            ids: inner.ids.clone(),
+            jobs: jobs.clone(),
             pipeline,
-            inner.store.clone(),
-            inner.clock.clone(),
-            job_queue,
-            notifiers.clone(),
-            cancel.clone(),
-        ));
+            notifiers: notifiers.clone(),
+            watches: watches.clone(),
+            response: config.source.response.clone(),
+        });
+
+        tasks.spawn(process_jobs(shared.clone(), job_queue, cancel.clone()));
         for (destination, connector) in destinations {
             let notify = notifiers
                 .get(&destination.id)
@@ -225,19 +234,11 @@ impl Engine {
                 store: inner.store.clone(),
                 clock: inner.clock.clone(),
                 notify,
+                watches: watches.clone(),
                 cancel: cancel.clone(),
                 idle_poll: inner.options.idle_poll,
             }));
         }
-        let shared = Arc::new(ChannelShared {
-            channel: channel.clone(),
-            connector: config.source.id.clone(),
-            data_type: config.source.data_type,
-            store: inner.store.clone(),
-            clock: inner.clock.clone(),
-            ids: inner.ids.clone(),
-            jobs: jobs.clone(),
-        });
         tasks.spawn(run_source(
             source,
             SourceContext::new(shared, cancel.clone()),
@@ -403,13 +404,48 @@ fn load_unprocessed(
     }))
 }
 
+/// Runs a message through the channel pipeline, records the result and
+/// wakes the destination workers. Returns what was recorded.
+pub(crate) async fn process_and_record(shared: &ChannelShared, envelope: Envelope) -> Processed {
+    let channel = &shared.channel;
+    let id = envelope.id;
+    let steps = shared.pipeline.clone();
+    let processed = match tokio::task::spawn_blocking(move || steps.process(envelope)).await {
+        Ok(processed) => processed,
+        Err(e) => Processed {
+            status: MessageStatus::Error,
+            error: Some(format!("processing panicked: {e}")),
+            contents: Vec::new(),
+            queue: Vec::new(),
+            filtered: Vec::new(),
+        },
+    };
+    if let Some(reason) = &processed.error {
+        warn!(%channel, %id, error = %reason, "message processing failed");
+    }
+    let now = shared.clock.now();
+    let record = processed.clone();
+    match shared
+        .store
+        .run(move |store| store.finish_processing(id, &record, now))
+        .await
+    {
+        Ok(()) => {
+            debug!(%channel, %id, destinations = processed.queue.len(), "message processed");
+            for destination in &processed.queue {
+                if let Some(notify) = shared.notifiers.get(destination) {
+                    notify.notify_one();
+                }
+            }
+        }
+        Err(e) => error!(%channel, %id, error = %e, "cannot record processing result"),
+    }
+    processed
+}
+
 async fn process_jobs(
-    channel: ChannelId,
-    pipeline: Arc<CompiledPipeline>,
-    store: StoreHandle,
-    clock: Arc<dyn Clock>,
+    shared: Arc<ChannelShared>,
     mut jobs: mpsc::Receiver<Job>,
-    notifiers: Arc<BTreeMap<ConnectorId, Arc<Notify>>>,
     cancel: CancellationToken,
 ) {
     loop {
@@ -422,46 +458,20 @@ async fn process_jobs(
         };
         let envelope = match job {
             Job::Fresh(envelope) => envelope,
-            Job::Stored(id) => match store.run(move |store| load_unprocessed(store, id)).await {
+            Job::Stored(id) => match shared
+                .store
+                .run(move |store| load_unprocessed(store, id))
+                .await
+            {
                 Ok(Some(envelope)) => envelope,
                 Ok(None) => continue,
                 Err(e) => {
-                    error!(%channel, %id, error = %e, "cannot load message for processing");
+                    error!(channel = %shared.channel, %id, error = %e, "cannot load message for processing");
                     continue;
                 }
             },
         };
-        let id = envelope.id;
-        let steps = pipeline.clone();
-        let processed = match tokio::task::spawn_blocking(move || steps.process(envelope)).await {
-            Ok(processed) => processed,
-            Err(e) => Processed {
-                status: MessageStatus::Error,
-                error: Some(format!("processing panicked: {e}")),
-                contents: Vec::new(),
-                queue: Vec::new(),
-                filtered: Vec::new(),
-            },
-        };
-        if let Some(reason) = &processed.error {
-            warn!(%channel, %id, error = %reason, "message processing failed");
-        }
-        let queued = processed.queue.clone();
-        let now = clock.now();
-        match store
-            .run(move |store| store.finish_processing(id, &processed, now))
-            .await
-        {
-            Ok(()) => {
-                debug!(%channel, %id, destinations = queued.len(), "message processed");
-                for destination in &queued {
-                    if let Some(notify) = notifiers.get(destination) {
-                        notify.notify_one();
-                    }
-                }
-            }
-            Err(e) => error!(%channel, %id, error = %e, "cannot record processing result"),
-        }
+        process_and_record(&shared, envelope).await;
     }
 }
 
@@ -474,6 +484,7 @@ struct Worker {
     store: StoreHandle,
     clock: Arc<dyn Clock>,
     notify: Arc<Notify>,
+    watches: Arc<DeliveryWatches>,
     cancel: CancellationToken,
     idle_poll: Duration,
 }
@@ -489,6 +500,7 @@ async fn deliver(worker: Worker) {
         store,
         clock,
         notify,
+        watches,
         cancel,
         idle_poll,
     } = worker;
@@ -537,6 +549,19 @@ async fn deliver(worker: Worker) {
                     }
                 },
             };
+            let report = match &outcome {
+                DeliveryOutcome::Sent { response } => Some(DeliveryReport {
+                    delivered: true,
+                    response: response.clone(),
+                    error: None,
+                }),
+                DeliveryOutcome::Failed { error } => Some(DeliveryReport {
+                    delivered: false,
+                    response: None,
+                    error: Some(error.clone()),
+                }),
+                DeliveryOutcome::Retry { .. } => None,
+            };
             let (id, target) = (delivery.message_id, destination.clone());
             if let Err(e) = store
                 .run(move |store| store.complete_delivery(id, &target, &outcome, now))
@@ -544,6 +569,9 @@ async fn deliver(worker: Worker) {
             {
                 error!(%channel, %destination, %id, error = %e, "cannot record delivery outcome");
                 break;
+            }
+            if let Some(report) = report {
+                watches.complete(id, &destination, report);
             }
         }
 

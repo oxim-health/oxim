@@ -7,6 +7,7 @@
 //! | `path-exists` | filter | `path`, optional `negate` |
 //! | `set` | transformer | `path`, `value` |
 //! | `copy` | transformer | `from`, `to` |
+//! | `clinical-kind` | filter | `kinds` (list of `results`, `orders`, `query`, `quality_control`, `device_event`), optional `negate` |
 //! | `passthrough` | encoder | none |
 //!
 //! Richer mapping, code tables and scripts are provided by other crates.
@@ -55,6 +56,38 @@ impl Filter for PathExists {
             .get(&self.path)?
             .is_some_and(|value| !value.is_empty());
         Ok(exists != self.negate)
+    }
+}
+
+/// Keeps messages whose normalized clinical content is one of `kinds`, for
+/// example to route quality control results to a QC destination. Messages
+/// without normalized content never match.
+#[derive(Debug, Clone)]
+pub struct ClinicalKind {
+    kinds: Vec<String>,
+    negate: bool,
+}
+
+/// The configuration name of a normalized content kind.
+pub fn clinical_kind_name(content: &oxim_model::ClinicalContent) -> &'static str {
+    use oxim_model::ClinicalContent;
+    match content {
+        ClinicalContent::Results { .. } => "results",
+        ClinicalContent::Orders { .. } => "orders",
+        ClinicalContent::Query { .. } => "query",
+        ClinicalContent::QualityControl { .. } => "quality_control",
+        ClinicalContent::DeviceEvent { .. } => "device_event",
+    }
+}
+
+impl Filter for ClinicalKind {
+    fn accept(&self, context: &MessageContext) -> Result<bool, StepError> {
+        let matched = context.clinical.as_ref().is_some_and(|content| {
+            self.kinds
+                .iter()
+                .any(|kind| kind == clinical_kind_name(content))
+        });
+        Ok(matched != self.negate)
     }
 }
 
@@ -136,6 +169,26 @@ pub(crate) fn register(registry: &mut Registry) {
         .add_filter("path-exists", |step| {
             Ok(Arc::new(PathExists {
                 path: step.text("path")?.to_owned(),
+                negate: negate(step),
+            }) as Arc<dyn Filter>)
+        })
+        .add_filter("clinical-kind", |step| {
+            const KNOWN: [&str; 5] = [
+                "results",
+                "orders",
+                "query",
+                "quality_control",
+                "device_event",
+            ];
+            let kinds = text_list(step, "kinds")?;
+            if let Some(unknown) = kinds.iter().find(|kind| !KNOWN.contains(&kind.as_str())) {
+                return Err(EngineError::Config(format!(
+                    "unknown clinical content kind {unknown:?}; use one of {}",
+                    KNOWN.join(", ")
+                )));
+            }
+            Ok(Arc::new(ClinicalKind {
+                kinds,
                 negate: negate(step),
             }) as Arc<dyn Filter>)
         })
