@@ -13,6 +13,8 @@ use crate::settings::Settings;
 pub(crate) fn registry(settings: &Settings) -> Registry {
     let mut registry = Registry::new();
     oxim_connectors::register(&mut registry);
+    oxim_connectors_db::register(&mut registry);
+    oxim_connectors_messaging::register(&mut registry);
     oxim_mapping::register(&mut registry);
     oxim_fhir::register(&mut registry);
     oxim_dicom::register(&mut registry);

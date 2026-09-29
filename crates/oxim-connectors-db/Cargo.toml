@@ -1,0 +1,42 @@
+[package]
+name = "oxim-connectors-db"
+description = "Database connectors for OXIM channels: PostgreSQL, MySQL/MariaDB, Microsoft SQL Server and SQLite polling readers and writers"
+keywords = ["healthcare", "database", "postgresql", "mysql", "sqlserver"]
+categories = ["database"]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+base64.workspace = true
+bytes.workspace = true
+futures-util.workspace = true
+mysql_async.workspace = true
+oxim-connectors.workspace = true
+oxim-core.workspace = true
+oxim-store.workspace = true
+rusqlite.workspace = true
+rustls-pki-types.workspace = true
+serde.workspace = true
+# Rows become JSON objects in column order.
+serde_json = { workspace = true, features = ["preserve_order"] }
+tiberius.workspace = true
+tokio = { workspace = true, features = ["net"] }
+tokio-postgres.workspace = true
+tokio-postgres-rustls.workspace = true
+tokio-rustls.workspace = true
+tokio-util = { workspace = true, features = ["compat"] }
+tracing.workspace = true
+
+[dev-dependencies]
+oxim-model.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true
