@@ -1,0 +1,7 @@
+from,to,display,system
+GLU,1520,Glucose,urn:oxim:example-lis
+CREA,1530,Creatinine,urn:oxim:example-lis
+HGB,2010,Hemoglobin,urn:oxim:example-lis
+WBC,2020,Leukocytes,urn:oxim:example-lis
+K,1540,Potassium,urn:oxim:example-lis
+NA,1550,Sodium,urn:oxim:example-lis

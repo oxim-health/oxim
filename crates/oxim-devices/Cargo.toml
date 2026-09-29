@@ -1,0 +1,39 @@
+[package]
+name = "oxim-devices"
+description = "Device registry, device profiles and profile conformance tests for OXIM"
+keywords = ["healthcare", "laboratory", "devices", "astm", "hl7"]
+categories = ["network-programming"]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+oxim-capture.workspace = true
+oxim-core.workspace = true
+oxim-model.workspace = true
+oxim-store.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde-saphyr.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net"] }
+tracing.workspace = true
+
+[dev-dependencies]
+oxim-anonymize.workspace = true
+oxim-connectors.workspace = true
+oxim-lab.workspace = true
+oxim-mapping.workspace = true
+oxim-sim.workspace = true
+oxim-transform.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

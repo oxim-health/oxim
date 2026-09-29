@@ -1,0 +1,82 @@
+# A generic laboratory analyzer that follows ASTM E1381/E1394 (CLSI LIS01
+# and LIS02) over TCP. Use it as the starting point for a real model's
+# profile: copy the directory, fill in the vendor's interface specification,
+# record the device with oxim-capture and replace the fixtures.
+profile_version: 1
+id: generic-astm-analyzer
+vendor: Generic
+model: ASTM LIS01/LIS02 analyzer
+description: >
+  Sends results (H, P, O, R, L records) after each run and asks the host
+  for the tests of a tube (Q record) when it reads a barcode. All data in
+  the fixtures is synthetic.
+connection:
+  transport: tcp
+  protocol: astm-lis01
+  device_role: client
+  dialect:
+    frame_text_max: 240
+    record_terminator: CR
+    delimiters: "|\\^&"
+    universal_test_id: "^^^<local code>"
+channel:
+  source:
+    type: astm-tcp
+    data_type: astm
+    normalize: true
+    response:
+      mode: pipeline
+      encoder: {type: astm-query-response, sender: OXIM}
+    settings:
+      listen: 0.0.0.0:5100
+  transformers:
+    - {type: track-device, device: generic-astm, silence_after: 1h}
+    - {type: map-observations, table: tables/device-to-lis.csv, on_missing: keep}
+    - {type: answer-query, device: generic-astm}
+mappings:
+  - table: tables/device-to-lis.csv
+    direction: device-to-lis
+    description: Local analyzer test codes to example LIS codes.
+quirks:
+  - id: panel-order-record
+    description: >
+      Result messages carry the ordered panel in O-5 (^^^PANEL) rather than
+      the individual tests.
+    workaround: >
+      Nothing to configure: the tests are taken from the R records, and
+      record-results closes an ordered panel by its code.
+setup:
+  - title: Network
+    text: >
+      In the analyzer's communication settings, choose ASTM over TCP/IP,
+      the analyzer as the TCP client, the OXIM server's address as host and
+      port 5100.
+  - title: Host query
+    text: >
+      Enable "query host for orders" (sometimes called real-time download
+      or host query) so the analyzer sends a Q record for each barcode it
+      reads.
+  - title: Check
+    text: >
+      Run `oxim profile test profile.yaml`, then run a control sample and
+      look for the message with `oxim messages list --channel <channel>`.
+verification:
+  level: simulated
+  evidence:
+    - note: Passes the fixtures below, recorded from the oxim-sim ASTM analyzer through oxim-capture.
+      source: oxim-sim
+fixtures:
+  - name: two-result-messages
+    description: The analyzer sends two result messages in one LIS01 session.
+    capture: fixtures/results.oximcap
+    expect:
+      messages: 2
+      status: completed
+      normalized: fixtures/results.expected.json
+  - name: host-query-unknown-tube
+    description: A query for a tube without orders is answered "no information".
+    messages: [fixtures/query.astm]
+    expect:
+      messages: 1
+      status: completed
+      replies_contain: ['H|\^&|||OXIM', 'L|1|I']

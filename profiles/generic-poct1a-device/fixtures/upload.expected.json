@@ -1,0 +1,82 @@
+[
+  {
+    "kind": "results",
+    "groups": [
+      {
+        "patient": {
+          "identifiers": [
+            {
+              "value": "SIM0000"
+            }
+          ]
+        },
+        "observations": [
+          {
+            "code": {
+              "codings": [
+                {
+                  "system": "urn:oxim:example-lis",
+                  "code": "3010",
+                  "display": "pH (blood gas)"
+                },
+                {
+                  "system": "LOCAL",
+                  "code": "pH"
+                }
+              ]
+            },
+            "value": {
+              "type": "quantity",
+              "value": {
+                "value": "7.35"
+              }
+            },
+            "status": "unknown",
+            "effective_at": "2026-09-29T11:59:00+03:00",
+            "operator": "sim-operator"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "kind": "results",
+    "groups": [
+      {
+        "patient": {
+          "identifiers": [
+            {
+              "value": "SIM0001"
+            }
+          ]
+        },
+        "observations": [
+          {
+            "code": {
+              "codings": [
+                {
+                  "system": "urn:oxim:example-lis",
+                  "code": "3010",
+                  "display": "pH (blood gas)"
+                },
+                {
+                  "system": "LOCAL",
+                  "code": "pH"
+                }
+              ]
+            },
+            "value": {
+              "type": "quantity",
+              "value": {
+                "value": "7.36"
+              }
+            },
+            "status": "unknown",
+            "effective_at": "2026-09-29T11:59:00+03:00",
+            "operator": "sim-operator"
+          }
+        ]
+      }
+    ]
+  }
+]
