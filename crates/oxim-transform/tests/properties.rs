@@ -26,6 +26,7 @@ fn context() -> MessageContext {
         ),
         clinical: None,
         variables: [("x".to_owned(), "1".to_owned())].into(),
+        response: None,
     }
 }
 
