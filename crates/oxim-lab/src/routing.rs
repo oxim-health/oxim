@@ -1,6 +1,6 @@
 //! Test routing: which devices perform which tests.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 use oxim_formats::{DelimitedDocument, DelimitedOptions};
 use oxim_model::CodeableConcept;
@@ -38,14 +38,17 @@ pub enum RoutingError {
 /// HGB,hema-1,
 /// ```
 ///
-/// A test may be performed by several devices; each is offered the test
-/// until one of them reports a result. A test matches a row when any of its
-/// codings has the row's code, so both the LIS code and the device code
-/// work after `map-observations`. Tests in no row are performed by no
-/// device. A UTF-8 byte order mark and blank rows are accepted.
+/// A test may be performed by several devices, listed in order of
+/// preference: `cache-orders` with a `balance` strategy assigns each test to
+/// one of them (see [`Balance`](crate::Balance)), and a device that asks for
+/// a tube in a host query is offered every test it can perform. A test
+/// matches a row when any of its codings has the row's code, so both the
+/// LIS code and the device code work after `map-observations`. Tests in no
+/// row are performed by no device. A UTF-8 byte order mark and blank rows
+/// are accepted.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Routing {
-    devices: HashMap<String, BTreeSet<String>>,
+    devices: HashMap<String, Vec<String>>,
 }
 
 impl Routing {
@@ -54,12 +57,12 @@ impl Routing {
         Self::default()
     }
 
-    /// Routes `test` to `device`.
+    /// Routes `test` to `device`, after the devices already listed for it.
     pub fn with(mut self, test: &str, device: &str) -> Self {
-        self.devices
-            .entry(test.to_owned())
-            .or_default()
-            .insert(device.to_owned());
+        let devices = self.devices.entry(test.to_owned()).or_default();
+        if !devices.iter().any(|known| known == device) {
+            devices.push(device.to_owned());
+        }
         self
     }
 
@@ -114,14 +117,20 @@ impl Routing {
         self.devices.is_empty()
     }
 
-    /// The devices that perform `test`.
-    pub fn devices(&self, test: &CodeableConcept) -> BTreeSet<&str> {
-        test.codings
+    /// The devices that perform `test`, in order of preference.
+    pub fn devices(&self, test: &CodeableConcept) -> Vec<&str> {
+        let mut devices: Vec<&str> = Vec::new();
+        for device in test
+            .codings
             .iter()
             .filter_map(|coding| self.devices.get(&coding.code))
             .flatten()
-            .map(String::as_str)
-            .collect()
+        {
+            if !devices.contains(&device.as_str()) {
+                devices.push(device);
+            }
+        }
+        devices
     }
 
     /// Whether `device` performs `test`.
@@ -129,7 +138,7 @@ impl Routing {
         test.codings.iter().any(|coding| {
             self.devices
                 .get(&coding.code)
-                .is_some_and(|devices| devices.contains(device))
+                .is_some_and(|devices| devices.iter().any(|known| known == device))
         })
     }
 }
@@ -153,13 +162,7 @@ mod tests {
             "\u{feff}Test,Device,Note\nGLU,chem-1,\nGLU,chem-2,backup\n,,\nHGB,hema-1,\n",
         )
         .unwrap();
-        assert_eq!(
-            routing
-                .devices(&test(&["GLU"]))
-                .into_iter()
-                .collect::<Vec<_>>(),
-            ["chem-1", "chem-2"]
-        );
+        assert_eq!(routing.devices(&test(&["GLU"])), ["chem-1", "chem-2"]);
         // Any coding matches: the LIS code or the device code.
         assert!(routing.routes(&test(&["2345-7", "HGB"]), "hema-1"));
         assert!(!routing.routes(&test(&["HGB"]), "chem-1"));
