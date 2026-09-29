@@ -386,6 +386,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxim-mapping"
+version = "0.0.0"
+dependencies = [
+ "encoding_rs",
+ "oxim-astm",
+ "oxim-core",
+ "oxim-hl7",
+ "oxim-model",
+ "oxim-poct1a",
+ "oxim-store",
+ "proptest",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "oxim-mllp"
 version = "0.0.0"
 dependencies = [
