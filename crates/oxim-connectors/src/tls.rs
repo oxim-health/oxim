@@ -203,13 +203,11 @@ fn host_of(target: &str) -> &str {
     }
 }
 
-/// The rustls configuration of a sender connecting to `target` and the name
-/// the server certificate must match, for protocols that run the handshake
-/// themselves (such as DICOM associations).
-pub fn client_config(
-    settings: &ClientTlsSettings,
-    target: &str,
-) -> Result<(Arc<rustls::ClientConfig>, String), EngineError> {
+/// Builds the rustls client configuration of a `tls` settings block: the
+/// trusted authorities and the optional client certificate, with the ring
+/// provider. Other connector crates use it for protocols whose client
+/// libraries accept a rustls configuration.
+pub fn client_config(settings: &ClientTlsSettings) -> Result<rustls::ClientConfig, EngineError> {
     let mut store = RootCertStore::empty();
     if settings.system_roots {
         let native = rustls_native_certs::load_native_certs();
@@ -234,34 +232,46 @@ pub fn client_config(
         .with_safe_default_protocol_versions()
         .map_err(|e| config_error(e.to_string()))?
         .with_root_certificates(store);
-    let config = match (&settings.cert_file, &settings.key_file) {
+    match (&settings.cert_file, &settings.key_file) {
         (Some(cert), Some(key)) => builder
             .with_client_auth_cert(certificates(cert)?, private_key(key)?)
-            .map_err(|e| config_error(format!("client certificate and key: {e}")))?,
-        (None, None) => builder.with_no_client_auth(),
-        _ => {
-            return Err(config_error(
-                "cert_file and key_file must be set together".into(),
-            ));
-        }
-    };
+            .map_err(|e| config_error(format!("client certificate and key: {e}"))),
+        (None, None) => Ok(builder.with_no_client_auth()),
+        _ => Err(config_error(
+            "cert_file and key_file must be set together".into(),
+        )),
+    }
+}
+
+/// The name a server certificate must match: `server_name` if set,
+/// otherwise the host part of `target` (`host:port`, `[v6]:port` or a bare
+/// host).
+pub fn server_name(
+    settings: &ClientTlsSettings,
+    target: &str,
+) -> Result<ServerName<'static>, EngineError> {
     let name = settings
         .server_name
         .clone()
         .unwrap_or_else(|| host_of(target).to_owned());
     ServerName::try_from(name.clone())
-        .map_err(|e| config_error(format!("invalid server name {name:?}: {e}")))?;
-    Ok((Arc::new(config), name))
+        .map_err(|e| config_error(format!("invalid server name {name:?}: {e}")))
+}
+
+/// The name a server certificate must match, as text, for protocols that
+/// run the handshake themselves (such as DICOM associations).
+pub fn server_name_text(settings: &ClientTlsSettings, target: &str) -> String {
+    settings
+        .server_name
+        .clone()
+        .unwrap_or_else(|| host_of(target).to_owned())
 }
 
 /// Builds the TLS client of a sender connecting to `target`.
 pub(crate) fn client(settings: &ClientTlsSettings, target: &str) -> Result<Client, EngineError> {
-    let (config, name) = client_config(settings, target)?;
-    let server_name = ServerName::try_from(name.clone())
-        .map_err(|e| config_error(format!("invalid server name {name:?}: {e}")))?;
     Ok(Client {
-        connector: TlsConnector::from(config),
-        server_name,
+        connector: TlsConnector::from(Arc::new(client_config(settings)?)),
+        server_name: server_name(settings, target)?,
     })
 }
 
@@ -278,7 +288,7 @@ impl Client {
 
 /// A connection, plain or with TLS.
 #[derive(Debug)]
-pub(crate) enum Stream {
+pub enum Stream {
     /// Plain TCP.
     Plain(TcpStream),
     /// TLS accepted by a listener.
@@ -289,7 +299,7 @@ pub(crate) enum Stream {
 
 impl Stream {
     /// The underlying socket.
-    pub(crate) fn tcp(&self) -> &TcpStream {
+    pub fn tcp(&self) -> &TcpStream {
         match self {
             Self::Plain(stream) => stream,
             Self::Server(stream) => stream.get_ref().0,
@@ -298,7 +308,7 @@ impl Stream {
     }
 
     /// Whether the connection is encrypted.
-    pub(crate) fn is_tls(&self) -> bool {
+    pub fn is_tls(&self) -> bool {
         !matches!(self, Self::Plain(_))
     }
 }
@@ -349,15 +359,16 @@ impl AsyncWrite for Stream {
 
 /// How a sender opens connections: plain or with TLS.
 #[derive(Debug, Clone)]
-pub(crate) struct Dialer {
+pub struct Dialer {
     target: String,
     connect_timeout: Duration,
     tls: Option<Client>,
 }
 
 impl Dialer {
-    /// A dialer for `target`, with TLS when `tls` is set.
-    pub(crate) fn new(
+    /// A dialer for `target`, with TLS when `tls` is set. Certificate files
+    /// are read here, so bad settings fail at deploy time.
+    pub fn new(
         target: &str,
         connect_timeout: Duration,
         tls: Option<&ClientTlsSettings>,
@@ -370,7 +381,7 @@ impl Dialer {
     }
 
     /// Connects, including the TLS handshake, within the connect timeout.
-    pub(crate) async fn connect(&self) -> Result<Stream, String> {
+    pub async fn connect(&self) -> Result<Stream, String> {
         let target = &self.target;
         let work = async {
             let tcp = TcpStream::connect(target)

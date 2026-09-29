@@ -41,6 +41,8 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-alert`](crates/oxim-alert) | Alert engine: queue, error, device silence, disk and certificate rules; email, webhook, Teams, Slack, syslog and SNMP notifications |
 | [`crates/oxim-script`](crates/oxim-script) | JavaScript filters, transformers and encoders in an embedded QuickJS sandbox, with Mirth Connect compatibility |
 | [`crates/oxim-connectors`](crates/oxim-connectors) | Source and destination connectors: MLLP, raw TCP, files, HTTP, ASTM over TCP and serial, POCT1-A |
+| [`crates/oxim-connectors-db`](crates/oxim-connectors-db) | Database connectors: PostgreSQL, MySQL/MariaDB, SQL Server and SQLite polling readers and writers |
+| [`crates/oxim-connectors-messaging`](crates/oxim-connectors-messaging) | Messaging connectors: MQTT, AMQP (RabbitMQ), Kafka and NATS/JetStream |
 | [`crates/oxim-dicom`](crates/oxim-dicom) | DICOM: storage, query/retrieve (C-FIND, C-MOVE, C-GET), modality worklist, MPPS, storage commitment, DICOMweb (STOW, QIDO, WADO), TLS, attribute filters and editing, PS3.15 de-identification |
 | [`crates/oxim-mirth`](crates/oxim-mirth) | Mirth Connect importer: channels, code templates and global scripts to channel files, with a migration report |
 | [`crates/oxim-devices`](crates/oxim-devices) | Device profiles, the device registry (`track-device`, silence detection) and `oxim profile test` conformance runs |

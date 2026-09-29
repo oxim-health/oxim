@@ -15,7 +15,14 @@ publish = false
 
 [workspace.dependencies]
 argon2 = "0.5"
+async-nats = { version = "0.50", default-features = false, features = ["ring", "jetstream", "nkeys", "server_2_10"] }
 async-trait = "0.1"
+lapin = { version = "4.12", default-features = false, features = ["rustls--ring", "rustls-native-certs", "tokio"] }
+mysql_async = { version = "0.37", default-features = false, features = ["default-rustls-ring"] }
+rskafka = { version = "0.6", default-features = false, features = ["transport-tls", "compression-gzip", "compression-lz4", "compression-snappy", "compression-zstd"] }
+tiberius = { version = "0.13", default-features = false, features = ["tds73"] }
+tokio-postgres = "0.7"
+tokio-postgres-rustls = { version = "0.14", features = ["ring"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
 base64 = "0.23"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
@@ -71,6 +78,8 @@ oxim-server = { path = "crates/oxim-server" }
 oxim-cda = { path = "crates/oxim-cda" }
 oxim-capture = { path = "crates/oxim-capture" }
 oxim-connectors = { path = "crates/oxim-connectors" }
+oxim-connectors-db = { path = "crates/oxim-connectors-db" }
+oxim-connectors-messaging = { path = "crates/oxim-connectors-messaging" }
 oxim-core = { path = "crates/oxim-core" }
 oxim-devices = { path = "crates/oxim-devices" }
 oxim-fhir = { path = "crates/oxim-fhir" }

@@ -30,6 +30,8 @@ pub(crate) fn build(settings: &Settings) -> Components {
     let mut registry = Registry::new();
     let devices = DeviceEnvironment::new(settings.data_dir.join("devices.db"));
     oxim_connectors::register(&mut registry);
+    oxim_connectors_db::register(&mut registry);
+    oxim_connectors_messaging::register(&mut registry);
     oxim_mapping::register(&mut registry);
     oxim_fhir::register(&mut registry);
     oxim_dicom::register_with(

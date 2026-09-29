@@ -1,0 +1,37 @@
+[package]
+name = "oxim-connectors-messaging"
+description = "Messaging connectors for OXIM channels: MQTT, AMQP (RabbitMQ), Kafka and NATS"
+keywords = ["healthcare", "mqtt", "amqp", "kafka", "nats"]
+categories = ["network-programming"]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-nats.workspace = true
+bytes.workspace = true
+futures-util.workspace = true
+lapin.workspace = true
+oxim-connectors.workspace = true
+oxim-core.workspace = true
+oxim-model.workspace = true
+oxim-store.workspace = true
+rskafka.workspace = true
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "net"] }
+tracing.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true
