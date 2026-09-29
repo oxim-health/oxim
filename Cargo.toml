@@ -46,6 +46,7 @@ tracing = "0.1"
 oxim-astm = { path = "crates/oxim-astm" }
 oxim-connectors = { path = "crates/oxim-connectors" }
 oxim-core = { path = "crates/oxim-core" }
+oxim-fhir = { path = "crates/oxim-fhir" }
 oxim-formats = { path = "crates/oxim-formats" }
 oxim-hl7 = { path = "crates/oxim-hl7" }
 oxim-mapping = { path = "crates/oxim-mapping" }

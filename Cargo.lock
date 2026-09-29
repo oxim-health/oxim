@@ -831,6 +831,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxim-fhir"
+version = "0.0.0"
+dependencies = [
+ "oxim-astm",
+ "oxim-core",
+ "oxim-hl7",
+ "oxim-mapping",
+ "oxim-model",
+ "oxim-store",
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "oxim-formats"
 version = "0.0.0"
 dependencies = [
