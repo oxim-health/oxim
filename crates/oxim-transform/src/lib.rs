@@ -110,6 +110,7 @@ pub(crate) mod test_support {
             envelope,
             clinical: None,
             variables: std::collections::BTreeMap::new(),
+            response: None,
         }
     }
 
