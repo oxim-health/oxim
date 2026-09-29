@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic Mirth Connect 3.12 channel group export written for the OXIM test suite. -->
+<channelGroup version="3.12.0">
+  <id>9f000000-0000-4000-8000-000000000001</id>
+  <name>Point of care</name>
+  <revision>2</revision>
+  <description>POC devices</description>
+  <channels>
+    <channel version="3.12.0">
+      <id>9f000000-0000-4000-8000-000000000002</id>
+      <name>Glucose meters</name>
+      <sourceConnector version="3.12.0">
+        <metaDataId>0</metaDataId>
+        <properties class="com.mirth.connect.connectors.http.HttpReceiverProperties" version="3.12.0">
+          <listenerConnectorProperties version="3.12.0">
+            <host>0.0.0.0</host>
+            <port>8080</port>
+          </listenerConnectorProperties>
+          <contextPath>/poc</contextPath>
+        </properties>
+        <transformer version="3.12.0">
+          <elements/>
+          <inboundDataType>JSON</inboundDataType>
+          <outboundDataType>JSON</outboundDataType>
+        </transformer>
+        <transportName>HTTP Listener</transportName>
+        <mode>SOURCE</mode>
+        <enabled>true</enabled>
+      </sourceConnector>
+      <destinationConnectors>
+        <connector version="3.12.0">
+          <metaDataId>1</metaDataId>
+          <name>Archive</name>
+          <properties class="com.mirth.connect.connectors.file.FileDispatcherProperties" version="3.12.0">
+            <destinationConnectorProperties version="3.12.0">
+              <queueEnabled>true</queueEnabled>
+              <retryIntervalMillis>60000</retryIntervalMillis>
+            </destinationConnectorProperties>
+            <scheme>FILE</scheme>
+            <host>/var/lib/poc</host>
+            <outputPattern>${message.messageId}.json</outputPattern>
+            <outputAppend>false</outputAppend>
+            <errorOnExists>false</errorOnExists>
+          </properties>
+          <transportName>File Writer</transportName>
+          <mode>DESTINATION</mode>
+          <enabled>true</enabled>
+        </connector>
+      </destinationConnectors>
+      <properties version="3.12.0">
+        <initialState>STARTED</initialState>
+      </properties>
+      <exportData>
+        <metadata>
+          <enabled>true</enabled>
+        </metadata>
+      </exportData>
+    </channel>
+    <channel version="3.12.0">
+      <id>9f000000-0000-4000-8000-000000000003</id>
+      <name>Retired meters</name>
+      <sourceConnector version="3.12.0">
+        <metaDataId>0</metaDataId>
+        <properties class="com.mirth.connect.connectors.tcp.TcpReceiverProperties" version="3.12.0">
+          <listenerConnectorProperties version="3.12.0">
+            <host>0.0.0.0</host>
+            <port>6700</port>
+          </listenerConnectorProperties>
+          <transmissionModeProperties class="com.mirth.connect.plugins.mllpmode.MLLPModeProperties">
+            <pluginPointName>MLLP</pluginPointName>
+          </transmissionModeProperties>
+          <serverMode>true</serverMode>
+        </properties>
+        <transformer version="3.12.0">
+          <elements/>
+          <inboundDataType>HL7V2</inboundDataType>
+          <outboundDataType>HL7V2</outboundDataType>
+        </transformer>
+        <transportName>TCP Listener</transportName>
+        <mode>SOURCE</mode>
+        <enabled>true</enabled>
+      </sourceConnector>
+      <destinationConnectors/>
+      <exportData>
+        <metadata>
+          <enabled>false</enabled>
+        </metadata>
+      </exportData>
+    </channel>
+  </channels>
+</channelGroup>

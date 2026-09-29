@@ -756,6 +756,7 @@ dependencies = [
  "oxim-fhir",
  "oxim-lab",
  "oxim-mapping",
+ "oxim-mirth",
  "oxim-model",
  "oxim-store",
  "oxim-transform",
@@ -902,6 +903,25 @@ dependencies = [
  "oxim-store",
  "proptest",
  "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "oxim-mirth"
+version = "0.0.0"
+dependencies = [
+ "oxim-connectors",
+ "oxim-core",
+ "oxim-model",
+ "oxim-store",
+ "oxim-transform",
+ "quick-xml",
+ "regex",
+ "serde",
+ "serde-saphyr",
+ "serde_json",
+ "tempfile",
  "thiserror",
  "tokio",
 ]

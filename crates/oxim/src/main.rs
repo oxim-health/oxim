@@ -2,6 +2,7 @@
 
 mod commands;
 mod components;
+mod import;
 mod init;
 mod logging;
 mod run;
@@ -52,6 +53,45 @@ enum Command {
     Service {
         #[command(subcommand)]
         command: ServiceCommand,
+    },
+    /// Import channels from another integration engine.
+    Import {
+        #[command(subcommand)]
+        command: ImportCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ImportCommand {
+    /// Convert a Mirth Connect export (channel, channel group, code template
+    /// library or server configuration backup) into channel files and a
+    /// migration report.
+    Mirth {
+        /// The exported XML file.
+        export: PathBuf,
+        /// Directory for the channel files.
+        #[arg(long, default_value = "channels")]
+        out: PathBuf,
+        /// Report file; `.json` writes JSON, anything else Markdown.
+        /// Default: mirth-migration-report.md in the output directory.
+        #[arg(long)]
+        report: Option<PathBuf>,
+        /// Another export whose code templates, global scripts and
+        /// configuration map apply (repeatable).
+        #[arg(long = "library")]
+        libraries: Vec<PathBuf>,
+        /// A value for a ${name} placeholder, as name=value (repeatable).
+        #[arg(long = "value")]
+        values: Vec<String>,
+        /// Print what would be written, and the report, without writing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Replace existing files.
+        #[arg(long)]
+        force: bool,
+        /// Leave out channels that are disabled in Mirth.
+        #[arg(long)]
+        skip_disabled: bool,
     },
 }
 
@@ -170,6 +210,31 @@ fn main() -> ExitCode {
             }),
             ServiceCommand::Run => service::run(&cli.config),
         },
+        Command::Import {
+            command:
+                ImportCommand::Mirth {
+                    export,
+                    out: target,
+                    report,
+                    libraries,
+                    values,
+                    dry_run,
+                    force,
+                    skip_disabled,
+                },
+        } => import::mirth(
+            &import::MirthImport {
+                export,
+                out: target,
+                libraries,
+                values,
+                report,
+                dry_run,
+                force,
+                skip_disabled,
+            },
+            &mut out,
+        ),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
