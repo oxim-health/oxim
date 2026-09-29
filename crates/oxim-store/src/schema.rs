@@ -62,6 +62,14 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX audit_by_message ON audit_events (message_id) WHERE message_id IS NOT NULL;
     CREATE INDEX audit_by_time ON audit_events (at);
     ",
+    // 2: the wrapped data key when contents are encrypted.
+    "
+    CREATE TABLE content_keys (
+        id INTEGER PRIMARY KEY,
+        wrapped BLOB NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    ",
 ];
 
 /// The schema version this build creates and understands.

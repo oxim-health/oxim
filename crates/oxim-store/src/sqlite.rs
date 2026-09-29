@@ -12,6 +12,7 @@ use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, Transaction, params, params_from_iter};
 
 use crate::MessageStore;
+use crate::cipher::{ContentCipher, content_context, unwrap_key, wrap_key};
 use crate::error::{StoreError, StoreResult};
 use crate::schema;
 use crate::types::{
@@ -28,6 +29,7 @@ use crate::types::{
 #[derive(Debug)]
 pub struct SqliteStore {
     conn: Connection,
+    cipher: Option<ContentCipher>,
 }
 
 impl SqliteStore {
@@ -35,14 +37,69 @@ impl SqliteStore {
     pub fn open(path: impl AsRef<Path>) -> StoreResult<Self> {
         let mut conn = Connection::open(path)?;
         schema::prepare(&mut conn)?;
-        Ok(Self { conn })
+        Ok(Self { conn, cipher: None })
+    }
+
+    /// Opens or creates the database at `path` with message contents
+    /// encrypted (AES-256-GCM). The database's data key is created on
+    /// first use and stored wrapped with `master_key`; the same master key
+    /// is needed to read the contents later. Contents written before
+    /// encryption was enabled stay readable.
+    pub fn open_encrypted(path: impl AsRef<Path>, master_key: &[u8; 32]) -> StoreResult<Self> {
+        let mut store = Self::open(path)?;
+        let master = ContentCipher::new(master_key)?;
+        let wrapped: Option<Vec<u8>> = store
+            .conn
+            .query_row("SELECT wrapped FROM content_keys WHERE id = 1", [], |row| {
+                row.get(0)
+            })
+            .optional()?;
+        let data_key = match wrapped {
+            Some(wrapped) => unwrap_key(&master, &wrapped)?,
+            None => {
+                let key = ContentCipher::generate_key()?;
+                store.conn.execute(
+                    "INSERT INTO content_keys (id, wrapped, created_at) VALUES (1, ?1, 0)",
+                    [wrap_key(&master, &key)?],
+                )?;
+                key
+            }
+        };
+        store.cipher = Some(ContentCipher::new(&data_key)?);
+        Ok(store)
+    }
+
+    fn seal(
+        &self,
+        data: &[u8],
+        message: &[u8],
+        stage: &str,
+        destination: &str,
+    ) -> StoreResult<Vec<u8>> {
+        match &self.cipher {
+            Some(cipher) => cipher.seal(data, &content_context(message, stage, destination)),
+            None => Ok(data.to_vec()),
+        }
+    }
+
+    fn unseal(
+        &self,
+        data: Vec<u8>,
+        message: &[u8],
+        stage: &str,
+        destination: &str,
+    ) -> StoreResult<Vec<u8>> {
+        match &self.cipher {
+            Some(cipher) => cipher.open(data, &content_context(message, stage, destination)),
+            None => Ok(data),
+        }
     }
 
     /// Opens a private in-memory database, for tests and simulations.
     pub fn open_in_memory() -> StoreResult<Self> {
         let mut conn = Connection::open_in_memory()?;
         schema::prepare(&mut conn)?;
-        Ok(Self { conn })
+        Ok(Self { conn, cipher: None })
     }
 
     /// The schema version of the open database.
@@ -200,6 +257,10 @@ fn complete_if_final(tx: &Transaction<'_>, id: &[u8]) -> StoreResult<()> {
 
 impl MessageStore for SqliteStore {
     fn receive(&mut self, envelopes: &[Envelope]) -> StoreResult<()> {
+        let sealed = envelopes
+            .iter()
+            .map(|envelope| self.seal(&envelope.raw, &id_bytes(envelope.id), "raw", ""))
+            .collect::<StoreResult<Vec<_>>>()?;
         let tx = self.conn.transaction()?;
         {
             let mut insert_message = tx.prepare_cached(
@@ -211,7 +272,7 @@ impl MessageStore for SqliteStore {
                 "INSERT INTO contents (message_id, stage, destination, data_type, data)
                  VALUES (?1, 'raw', '', ?2, ?3)",
             )?;
-            for envelope in envelopes {
+            for (envelope, raw) in envelopes.iter().zip(&sealed) {
                 let id = id_bytes(envelope.id);
                 let metadata =
                     serde_json::to_string(&envelope.metadata).map_err(|e| StoreError::Corrupt {
@@ -229,7 +290,7 @@ impl MessageStore for SqliteStore {
                     envelope.correlation_id,
                     metadata,
                 ])?;
-                insert_raw.execute(params![id, envelope.data_type.as_str(), envelope.raw])?;
+                insert_raw.execute(params![id, envelope.data_type.as_str(), raw])?;
             }
         }
         tx.commit()?;
@@ -252,6 +313,18 @@ impl MessageStore for SqliteStore {
             )));
         }
         let key = id_bytes(id);
+        let sealed = processed
+            .contents
+            .iter()
+            .map(|content| {
+                self.seal(
+                    &content.data,
+                    &key,
+                    content.stage.as_str(),
+                    content.destination.as_ref().map_or("", ConnectorId::as_str),
+                )
+            })
+            .collect::<StoreResult<Vec<_>>>()?;
         let tx = self.conn.transaction()?;
         let (status, channel) =
             message_status(&tx, &key)?.ok_or(StoreError::MessageNotFound(id))?;
@@ -275,7 +348,7 @@ impl MessageStore for SqliteStore {
                 "INSERT OR REPLACE INTO contents (message_id, stage, destination, data_type, data)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
             )?;
-            for content in &processed.contents {
+            for (content, data) in processed.contents.iter().zip(&sealed) {
                 if content.stage == Stage::Raw {
                     return Err(StoreError::InvalidState(
                         "the raw content cannot be replaced".into(),
@@ -286,7 +359,7 @@ impl MessageStore for SqliteStore {
                     content.stage.as_str(),
                     content.destination.as_ref().map_or("", ConnectorId::as_str),
                     content.data_type.map(DataType::as_str),
-                    content.data,
+                    data,
                 ])?;
             }
             let mut insert_delivery = tx.prepare_cached(
@@ -424,6 +497,7 @@ impl MessageStore for SqliteStore {
                 detail: format!("no encoded content of {message_id} for {destination}"),
             })?;
         tx.commit()?;
+        let payload = self.unseal(payload, &key, "encoded", destination.as_str())?;
         Ok(Some(Delivery {
             message_id,
             channel: channel.clone(),
@@ -442,6 +516,12 @@ impl MessageStore for SqliteStore {
         now: Timestamp,
     ) -> StoreResult<()> {
         let key = id_bytes(id);
+        let sealed_response = match outcome {
+            DeliveryOutcome::Sent {
+                response: Some(response),
+            } => Some(self.seal(response, &key, "response", destination.as_str())?),
+            _ => None,
+        };
         let tx = self.conn.transaction()?;
         let status: String = tx
             .query_row(
@@ -457,8 +537,8 @@ impl MessageStore for SqliteStore {
             )));
         }
         let (status, next, error) = match outcome {
-            DeliveryOutcome::Sent { response } => {
-                if let Some(response) = response {
+            DeliveryOutcome::Sent { .. } => {
+                if let Some(response) = &sealed_response {
                     tx.execute(
                         "INSERT OR REPLACE INTO contents (message_id, stage, destination, data_type, data)
                          VALUES (?1, 'response', ?2, NULL, ?3)",
@@ -602,7 +682,12 @@ impl MessageStore for SqliteStore {
                 stage,
                 destination: destination.cloned(),
                 data_type: optional("data_type", data_type)?,
-                data,
+                data: self.unseal(
+                    data,
+                    &id_bytes(id),
+                    stage.as_str(),
+                    destination.map_or("", ConnectorId::as_str),
+                )?,
             })
         })
         .transpose()
@@ -825,15 +910,18 @@ impl MessageStore for SqliteStore {
                 "the raw content cannot be replaced".into(),
             ));
         }
+        let key = id_bytes(id);
+        let destination = content.destination.as_ref().map_or("", ConnectorId::as_str);
+        let data = self.seal(&content.data, &key, content.stage.as_str(), destination)?;
         let changed = self.conn.execute(
             "INSERT OR REPLACE INTO contents (message_id, stage, destination, data_type, data)
              SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM messages WHERE id = ?1)",
             params![
-                id_bytes(id),
+                key,
                 content.stage.as_str(),
-                content.destination.as_ref().map_or("", ConnectorId::as_str),
+                destination,
                 content.data_type.map(DataType::as_str),
-                content.data,
+                data,
             ],
         )?;
         if changed == 0 {

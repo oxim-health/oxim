@@ -3761,6 +3761,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxim-shadow"
+version = "0.0.0"
+dependencies = [
+ "oxim-astm",
+ "oxim-capture",
+ "oxim-connectors",
+ "oxim-core",
+ "oxim-hl7",
+ "oxim-mllp",
+ "oxim-model",
+ "oxim-store",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "oxim-sim"
 version = "0.0.0"
 dependencies = [
@@ -3780,10 +3800,24 @@ version = "0.0.0"
 dependencies = [
  "oxim-model",
  "proptest",
+ "ring",
  "rusqlite",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "oxim-store-postgres"
+version = "0.0.0"
+dependencies = [
+ "oxim-connectors",
+ "oxim-model",
+ "oxim-store",
+ "postgres",
+ "serde_json",
+ "tokio-postgres-rustls",
+ "tracing",
 ]
 
 [[package]]
@@ -4172,6 +4206,20 @@ name = "portable-atomic"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05c8b63e8d9609db387f0324918f81d68fe27748f084ef092fb35954d0539a85"
+
+[[package]]
+name = "postgres"
+version = "0.19.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33ad20e0aa0b24f5a394eab4f78c781d248982b22b25cecc7e3aa46a681605bd"
+dependencies = [
+ "bytes",
+ "fallible-iterator 0.2.0",
+ "futures-util",
+ "log",
+ "tokio",
+ "tokio-postgres",
+]
 
 [[package]]
 name = "postgres-protocol"

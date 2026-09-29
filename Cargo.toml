@@ -59,6 +59,7 @@ hyper-util = { version = "0.1", features = ["client-legacy", "http1", "server", 
 memchr = "2.7"
 quick-xml = "0.42"
 regex = "1.11"
+postgres = "0.19"
 ring = "0.17"
 rquickjs = { version = "0.14", default-features = false, features = ["std", "parallel"] }
 russh = { version = "0.63", default-features = false, features = ["ring", "flate2"] }
@@ -83,6 +84,7 @@ oxim-auth = { path = "crates/oxim-auth" }
 oxim-server = { path = "crates/oxim-server" }
 oxim-cda = { path = "crates/oxim-cda" }
 oxim-capture = { path = "crates/oxim-capture" }
+oxim-shadow = { path = "crates/oxim-shadow" }
 oxim-connectors = { path = "crates/oxim-connectors" }
 oxim-connectors-db = { path = "crates/oxim-connectors-db" }
 oxim-connectors-messaging = { path = "crates/oxim-connectors-messaging" }
@@ -104,6 +106,7 @@ oxim-poct1a = { path = "crates/oxim-poct1a" }
 oxim-script = { path = "crates/oxim-script" }
 oxim-sim = { path = "crates/oxim-sim" }
 oxim-store = { path = "crates/oxim-store" }
+oxim-store-postgres = { path = "crates/oxim-store-postgres" }
 oxim-transform = { path = "crates/oxim-transform" }
 oxim-x12 = { path = "crates/oxim-x12" }
 

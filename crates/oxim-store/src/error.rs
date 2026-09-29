@@ -33,6 +33,9 @@ pub enum StoreError {
     /// The requested operation does not fit the current state.
     #[error("invalid state: {0}")]
     InvalidState(String),
+    /// Another database backend (such as PostgreSQL) reported an error.
+    #[error("database error: {0}")]
+    Backend(String),
 }
 
 /// Result alias for store operations.
