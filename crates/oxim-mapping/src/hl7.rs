@@ -551,6 +551,22 @@ pub fn normalize(message: &oxim_hl7::Message) -> MappingResult<ClinicalContent> 
             Ok(ClinicalContent::Orders { groups })
         }
         "QRY" | "QBP" => query(message, &reader),
+        // A query answer (RSP^K11) that carries the orders; "not found"
+        // answers carry none.
+        "RSP" => {
+            let groups = walk(message, &reader)
+                .into_iter()
+                .filter_map(|(patient, group)| {
+                    let order = finish_order(group.order, group.specimen.as_ref())?;
+                    Some(OrderGroup {
+                        patient,
+                        specimen: group.specimen,
+                        order,
+                    })
+                })
+                .collect::<Vec<_>>();
+            Ok(ClinicalContent::Orders { groups })
+        }
         "" => Err(MappingError::Unsupported(
             "the HL7 message has no MSH-9 message type".into(),
         )),
@@ -1342,6 +1358,38 @@ pub fn encode_work_orders(
     };
     let mut writer = Writer::new(settings, "OML^O33^OML_O33", id, timestamp)?;
     write_work_orders(&mut writer, groups)?;
+    Ok(writer.message)
+}
+
+/// Writes `QBP^Q11`, a work order query (IHE LAW LAB-27) for a `Query`,
+/// for example to ask the LIS about a tube the order cache does not know:
+/// QPD-1 `WOS^Work Order Step^IHE_LABTF`, QPD-2 the query tag (the message
+/// identifier), QPD-3 the specimen identifier and RCP-1 `I` (immediate).
+/// LAW queries name one specimen; the first queried specimen is used.
+pub fn encode_query(
+    content: &ClinicalContent,
+    settings: &Hl7Encoding,
+    id: MessageId,
+    timestamp: Timestamp,
+) -> MappingResult<oxim_hl7::Message> {
+    let ClinicalContent::Query { query, .. } = content else {
+        return Err(MappingError::WrongContent {
+            encoder: "hl7v2-qbp-q11",
+            found: kind_name(content),
+        });
+    };
+    let Some(specimen) = query.specimen_ids.first() else {
+        return Err(MappingError::Unsupported(
+            "the query names no specimen".into(),
+        ));
+    };
+    let mut writer = Writer::new(settings, "QBP^Q11^QBP_Q11", id, timestamp)?;
+    let qpd = writer.segment("QPD")?;
+    writer.raw(&format!("QPD[{qpd}]-1"), b"WOS^Work Order Step^IHE_LABTF")?;
+    writer.set("QPD", qpd, "2", Some(&id.to_string()))?;
+    writer.set("QPD", qpd, "3", Some(specimen))?;
+    let rcp = writer.segment("RCP")?;
+    writer.set("RCP", rcp, "1", Some("I"))?;
     Ok(writer.message)
 }
 

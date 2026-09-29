@@ -211,7 +211,12 @@ const CACHE_ORDERS: &str = "cache-orders";
 ///     require_specimen: false   # true: an order without a specimen ID is an error
 ///     routing: routing.csv      # optional: assign each test to one device
 ///     balance: least_loaded     # primary (default), round_robin or least_loaded
+///     mark_sent: false          # true: record the tests as given to `device`
+///     device: chem-1            # optional, with mark_sent
 /// ```
+///
+/// `mark_sent` suits orders that go straight to a device, such as the
+/// LIS's answer to a device's host query in a `source.response.fallback`.
 ///
 /// Other content passes unchanged. Orders are filed by specimen identifier
 /// (see [`OrderCache::apply`](crate::OrderCache::apply)); an order without
@@ -229,6 +234,8 @@ pub struct CacheOrders {
     environment: LabEnvironment,
     require_specimen: bool,
     assigner: Option<Assigner>,
+    mark_sent: bool,
+    device: Option<String>,
 }
 
 impl CacheOrders {
@@ -248,10 +255,19 @@ impl CacheOrders {
                 "step {CACHE_ORDERS:?}: \"balance\" needs \"routing\""
             )));
         }
+        let mark_sent = flag(step, "mark_sent", false)?;
+        let device = optional_text(step, "device")?;
+        if device.is_some() && !mark_sent {
+            return Err(EngineError::Config(format!(
+                "step {CACHE_ORDERS:?}: \"device\" needs \"mark_sent: true\""
+            )));
+        }
         Ok(Self {
             environment: environment.clone(),
             require_specimen: flag(step, "require_specimen", false)?,
             assigner,
+            mark_sent,
+            device,
         })
     }
 }
@@ -275,6 +291,23 @@ impl Transformer for CacheOrders {
                     {
                         assigned = assigner
                             .assign(&cache, &order, &mut load, now)
+                            .map_err(failure(CACHE_ORDERS))?;
+                    }
+                    if self.mark_sent && group.order.control != Some(OrderControl::Cancel) {
+                        let codes: Vec<&str> = group
+                            .order
+                            .tests
+                            .iter()
+                            .flat_map(|test| test.codings.iter().map(|c| c.code.as_str()))
+                            .collect();
+                        cache
+                            .set_status(
+                                &outcome.specimen_id,
+                                &codes,
+                                TestStatus::Sent,
+                                self.device.as_deref(),
+                                now,
+                            )
                             .map_err(failure(CACHE_ORDERS))?;
                     }
                     debug!(
@@ -307,6 +340,7 @@ const ANSWER_QUERY: &str = "answer-query";
 ///     routing: routing.csv        # optional; only tests routed to the device
 ///     include_resulted: false     # true: also offer tests that have results
 ///     mark_sent: true             # record the offered tests as sent
+///     on_missing: answer          # answer, or ask: leave the query for the LIS
 /// ```
 ///
 /// A `Query` becomes `Orders` holding, for each queried specimen found in
@@ -315,6 +349,12 @@ const ANSWER_QUERY: &str = "answer-query";
 /// unknown or have nothing left for the device are left out, so an encoder
 /// such as `astm-query-response` answers "no information" for them. Other
 /// content passes unchanged.
+///
+/// With `on_missing: ask`, a query for tubes the cache does not know at all
+/// stays a `Query`: the reply encoder does not answer it, and a
+/// `source.response.fallback` destination (the LIS) can be asked instead;
+/// its answer is cached and encoded for the device. Tubes the cache knows
+/// are always answered from the cache.
 #[derive(Debug, Clone)]
 pub struct AnswerQuery {
     environment: LabEnvironment,
@@ -322,6 +362,7 @@ pub struct AnswerQuery {
     routing: Option<Arc<Routing>>,
     include_resulted: bool,
     mark_sent: bool,
+    ask_when_unknown: bool,
 }
 
 impl AnswerQuery {
@@ -342,6 +383,15 @@ impl AnswerQuery {
             routing,
             include_resulted: flag(step, "include_resulted", false)?,
             mark_sent: flag(step, "mark_sent", true)?,
+            ask_when_unknown: match optional_text(step, "on_missing")?.as_deref() {
+                None | Some("answer") => false,
+                Some("ask") => true,
+                Some(other) => {
+                    return Err(EngineError::Config(format!(
+                        "step {ANSWER_QUERY:?}: on_missing must be answer or ask, not {other:?}"
+                    )));
+                }
+            },
         })
     }
 
@@ -376,6 +426,7 @@ impl Transformer for AnswerQuery {
         };
         let mut groups = Vec::new();
         let mut seen = BTreeSet::new();
+        let mut known = 0;
         for id in &query.specimen_ids {
             if !seen.insert(id.as_str()) {
                 continue;
@@ -384,6 +435,7 @@ impl Transformer for AnswerQuery {
                 debug!(specimen = %id, "host query for an unknown specimen");
                 continue;
             };
+            known += 1;
             let mut group = order.to_group(offered);
             if group.order.tests.is_empty() {
                 continue;
@@ -401,6 +453,13 @@ impl Transformer for AnswerQuery {
                     .map_err(failure(ANSWER_QUERY))?;
             }
             groups.push(group);
+        }
+        if known == 0 && self.ask_when_unknown {
+            debug!(
+                specimens = query.specimen_ids.len(),
+                "no queried specimen is cached; leaving the query for the LIS"
+            );
+            return Ok(());
         }
         debug!(
             specimens = query.specimen_ids.len(),

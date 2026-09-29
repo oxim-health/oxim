@@ -157,6 +157,35 @@ impl Encoder for WorkOrderEncoder {
     }
 }
 
+/// Encodes a host query as HL7 v2 `QBP^Q11`, for example to ask the LIS
+/// about a tube the order cache does not know.
+#[derive(Debug, Clone, Default)]
+pub struct QueryEncoder {
+    /// Header settings.
+    pub settings: Hl7Encoding,
+}
+
+impl Encoder for QueryEncoder {
+    fn encode(&self, context: &MessageContext) -> Result<Encoded, StepError> {
+        let content = clinical(context, "hl7v2-qbp-q11")?;
+        let message = hl7::encode_query(
+            content,
+            &self.settings,
+            context.envelope.id,
+            context.envelope.received_at,
+        )
+        .map_err(step_error("hl7v2-qbp-q11"))?;
+        Ok(Encoded {
+            data_type: DataType::Hl7V2,
+            data: message.to_bytes(),
+        })
+    }
+
+    fn handles(&self, context: &MessageContext) -> bool {
+        matches!(context.clinical, Some(ClinicalContent::Query { .. }))
+    }
+}
+
 /// Answers an HL7 v2 host query (`QBP`) with `RSP^K11`, built from the
 /// orders that a step such as `answer-query` put in place of the query.
 #[derive(Debug, Clone, Default)]
@@ -345,7 +374,7 @@ pub fn astm_settings(step: &StepConfig, report_type: &str) -> Result<AstmEncodin
 }
 
 /// Registers the normalizers for ASTM, HL7 v2 and POCT1-A and the encoders
-/// `hl7v2-oru-r01`, `hl7v2-oml-o21`, `hl7v2-oml-o33`, `hl7v2-rsp-k11`,
+/// `hl7v2-oru-r01`, `hl7v2-oml-o21`, `hl7v2-oml-o33`, `hl7v2-qbp-q11`, `hl7v2-rsp-k11`,
 /// `astm-orders`, `astm-query-response` and `clinical-json`.
 pub fn register(registry: &mut Registry) {
     registry
@@ -364,6 +393,11 @@ pub fn register(registry: &mut Registry) {
         })
         .add_encoder("hl7v2-oml-o33", |step| {
             Ok(Arc::new(WorkOrderEncoder {
+                settings: hl7_settings(step)?,
+            }) as Arc<dyn Encoder>)
+        })
+        .add_encoder("hl7v2-qbp-q11", |step| {
+            Ok(Arc::new(QueryEncoder {
                 settings: hl7_settings(step)?,
             }) as Arc<dyn Encoder>)
         })

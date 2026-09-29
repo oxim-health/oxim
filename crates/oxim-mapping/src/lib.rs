@@ -8,7 +8,7 @@
 //! | Module | From messages | To messages |
 //! |---|---|---|
 //! | [`astm`] | results, QC, orders and host queries | orders and host query answers (`H`, `P`, `O`, `L`) |
-//! | [`hl7`] | `ORU`/`OUL` results, `ORM`/`OML` orders, `QRY`/`QBP` queries | `ORU^R01` results and QC, `OML^O21` orders, `OML^O33` work orders, `RSP^K11` query answers |
+//! | [`hl7`] | `ORU`/`OUL` results, `ORM`/`OML` orders, `QRY`/`QBP` queries, `RSP` query answers with orders | `ORU^R01` results and QC, `OML^O21` orders, `OML^O33` work orders, `QBP^Q11` queries, `RSP^K11` query answers |
 //! | [`poct1a`] | `OBS` observations and QC, `DST`/`EVS` device events | not needed: devices do not accept results |
 //!
 //! Each module documents its field-by-field rules as tables. Values are
@@ -17,7 +17,7 @@
 //! codes, and units are never converted.
 //!
 //! [`register`] adds the normalizers and the encoders `hl7v2-oru-r01`,
-//! `hl7v2-oml-o21`, `hl7v2-oml-o33`, `hl7v2-rsp-k11`, `astm-orders`,
+//! `hl7v2-oml-o21`, `hl7v2-oml-o33`, `hl7v2-qbp-q11`, `hl7v2-rsp-k11`, `astm-orders`,
 //! `astm-query-response` and `clinical-json` to an engine [`Registry`](oxim_core::Registry), so
 //! channels can write:
 //!
@@ -52,6 +52,6 @@ pub mod values;
 pub use error::{MappingError, MappingResult};
 pub use steps::{
     AstmNormalizer, AstmOrdersEncoder, ClinicalJsonEncoder, Hl7Normalizer, OmlEncoder, OruEncoder,
-    Poct1aNormalizer, QueryResponseEncoder, WorkOrderEncoder, astm_settings, hl7_settings,
-    register,
+    Poct1aNormalizer, QueryEncoder, QueryResponseEncoder, WorkOrderEncoder, astm_settings,
+    hl7_settings, register,
 };

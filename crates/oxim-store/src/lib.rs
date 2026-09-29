@@ -138,6 +138,15 @@ pub trait MessageStore: Send {
     /// Appends an event to the audit trail.
     fn record_audit(&mut self, event: &AuditEvent) -> StoreResult<()>;
 
+    /// Adds or replaces one content of a processed message, for content
+    /// produced after processing, such as a reply relayed from a
+    /// destination. The raw content cannot be replaced. The default
+    /// implementation keeps nothing; stores should override it.
+    fn record_content(&mut self, id: MessageId, content: &Content) -> StoreResult<()> {
+        let _ = (id, content);
+        Ok(())
+    }
+
     /// Messages and deliveries counted by state, for metrics. The default
     /// implementation reports nothing; stores should override it.
     fn status_counts(&self) -> StoreResult<StatusCounts> {

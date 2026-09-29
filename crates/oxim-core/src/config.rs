@@ -124,6 +124,42 @@ pub struct ResponseConfig {
     /// pipeline step must set the reply itself.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encoder: Option<StepConfig>,
+    /// For `mode: pipeline`: when the pipeline produces no reply (for
+    /// example a host query for a tube the order cache does not know), the
+    /// response of a destination (for example the LIS) becomes the reply,
+    /// within `timeout`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<FallbackConfig>,
+}
+
+fn true_default() -> bool {
+    true
+}
+
+/// How a destination's response becomes the reply when the pipeline
+/// produced none; see [`ResponseConfig::fallback`].
+///
+/// The response is parsed as `data_type`, normalized when `normalize` is
+/// set, passed through `transformers` (for example `cache-orders` and code
+/// mapping to the device's codes) and encoded with the reply `encoder`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FallbackConfig {
+    /// The destination whose response is used. Its filters decide which
+    /// messages it receives, for example only unanswered queries.
+    pub destination: ConnectorId,
+    /// The data type of the response; the source's data type by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_type: Option<DataType>,
+    /// Options for generic data types.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<Settings>,
+    /// Whether to map the response to the normalized clinical model.
+    #[serde(default = "true_default")]
+    pub normalize: bool,
+    /// Transformers applied to the response before the reply encoder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub transformers: Vec<StepConfig>,
 }
 
 fn response_timeout_default() -> DurationText {
@@ -462,6 +498,24 @@ impl ChannelConfig {
                     )));
                 }
                 _ => {}
+            }
+            if let Some(fallback) = &response.fallback {
+                if response.mode != ResponseMode::Pipeline {
+                    return Err(EngineError::Config(format!(
+                        "channel {}: a response `fallback` needs `mode: pipeline`",
+                        self.id
+                    )));
+                }
+                if !self
+                    .destinations
+                    .iter()
+                    .any(|d| d.id == fallback.destination)
+                {
+                    return Err(EngineError::Config(format!(
+                        "channel {}: fallback destination {} is not a destination of the channel",
+                        self.id, fallback.destination
+                    )));
+                }
             }
         }
         let mut ids = BTreeSet::from([self.source.id.clone()]);

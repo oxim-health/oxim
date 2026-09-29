@@ -70,6 +70,26 @@ impl Encoder for Picky {
     }
 }
 
+/// Encodes `REPLY:` plus the document, but only documents that are an
+/// answer (they start with `ANSWER`).
+#[derive(Debug)]
+struct AnswersOnly;
+
+impl Encoder for AnswersOnly {
+    fn encode(&self, context: &MessageContext) -> Result<Encoded, StepError> {
+        let mut data = b"REPLY:".to_vec();
+        data.extend(context.document.to_bytes());
+        Ok(Encoded {
+            data_type: DataType::Raw,
+            data,
+        })
+    }
+
+    fn handles(&self, context: &MessageContext) -> bool {
+        context.document.to_bytes().starts_with(b"ANSWER")
+    }
+}
+
 /// A destination that answers `ANSWER`, or keeps failing when told to.
 #[derive(Debug, Default)]
 struct Answering {
@@ -103,7 +123,10 @@ async fn engine(destination: Arc<Answering>) -> (Engine, mpsc::Sender<Request>) 
         .add_transformer("echo-reply", |_| {
             Ok(Arc::new(EchoReply) as Arc<dyn Transformer>)
         })
-        .add_encoder("picky", |_| Ok(Arc::new(Picky) as Arc<dyn Encoder>));
+        .add_encoder("picky", |_| Ok(Arc::new(Picky) as Arc<dyn Encoder>))
+        .add_encoder("answers-only", |_| {
+            Ok(Arc::new(AnswersOnly) as Arc<dyn Encoder>)
+        });
     let mut options = EngineOptions::default();
     options.idle_poll = Duration::from_millis(50);
     options.shutdown_grace = Duration::from_secs(2);
@@ -269,4 +292,68 @@ source:
     assert!(reply.data.is_none());
     assert_eq!(reply.status, MessageStatus::Completed, "{:?}", reply.error);
     engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_destination_answers_when_the_pipeline_cannot() {
+    let lis = Arc::new(Answering::default());
+    let (engine, inbox) = engine(lis.clone()).await;
+    let config = ChannelConfig::from_yaml(
+        "id: fallback
+source:
+  type: request
+  data_type: hl7v2
+  response:
+    mode: pipeline
+    timeout: 300ms
+    encoder: {type: answers-only}
+    fallback: {destination: lis, data_type: raw, normalize: false}
+destinations:
+  - id: lis
+    type: answering
+    queue: {retry: {initial_delay: 50ms, max_delay: 50ms}}
+",
+    )
+    .unwrap();
+    engine.deploy(config).await.unwrap();
+
+    // The pipeline cannot answer a query, so the LIS's response is
+    // encoded into the reply and stored as the reply stage.
+    let reply = ask(&inbox, QUERY).await;
+    assert_eq!(
+        reply.data.as_deref(),
+        Some(&b"REPLY:ANSWER"[..]),
+        "{:?}",
+        reply.error
+    );
+    let id = reply.message_id;
+    let stored = engine
+        .store()
+        .run(move |store| store.content(id, Stage::Reply, None))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.data, b"REPLY:ANSWER");
+
+    // A message the pipeline answers itself never waits for the LIS.
+    let reply = ask(&inbox, b"ANSWER|^~\\&|already answered\r").await;
+    assert!(reply.data.is_some() || reply.error.is_some());
+
+    // When the LIS does not answer in time the sender gets no reply.
+    lis.down.store(true, Ordering::SeqCst);
+    let reply = ask(&inbox, QUERY).await;
+    assert!(reply.data.is_none());
+    assert!(reply.error.unwrap().contains("did not answer within 300ms"));
+    engine.shutdown().await;
+}
+
+#[test]
+fn fallback_configuration_is_validated() {
+    for yaml in [
+        "id: a\nsource: {type: request, data_type: hl7v2, response: {mode: pipeline, fallback: {destination: nowhere}}}\n",
+        "id: a\nsource: {type: request, data_type: hl7v2, response: {mode: destination, destination: x, fallback: {destination: x}}}\ndestinations:\n  - {id: x, type: answering}\n",
+        "id: a\nsource: {type: request, data_type: hl7v2, response: {mode: pipeline, fallback: {destination: x, colour: red}}}\ndestinations:\n  - {id: x, type: answering}\n",
+    ] {
+        assert!(ChannelConfig::from_yaml(yaml).is_err(), "{yaml}");
+    }
 }

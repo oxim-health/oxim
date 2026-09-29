@@ -5,7 +5,7 @@ Mappings between protocol messages and the normalized clinical model of [OXIM](.
 | Protocol | Normalizes | Encodes |
 |---|---|---|
 | ASTM E1394 (CLSI LIS02) | results, QC, orders, host queries | orders and host query answers (`astm-orders`, `astm-query-response`) |
-| HL7 v2 | `ORU`/`OUL` results, `ORM`/`OML` orders, `QRY`/`QBP` queries | `ORU^R01` results and QC (`hl7v2-oru-r01`), `OML^O21` orders (`hl7v2-oml-o21`), IHE LAW `OML^O33` work orders (`hl7v2-oml-o33`) and `RSP^K11` query answers (`hl7v2-rsp-k11`) |
+| HL7 v2 | `ORU`/`OUL` results, `ORM`/`OML` orders, `QRY`/`QBP` queries | `ORU^R01` results and QC (`hl7v2-oru-r01`), `OML^O21` orders (`hl7v2-oml-o21`), IHE LAW `OML^O33` work orders (`hl7v2-oml-o33`), `QBP^Q11` work order queries (`hl7v2-qbp-q11`) and `RSP^K11` query answers (`hl7v2-rsp-k11`); `RSP` answers with orders normalize to `Orders` |
 | POCT1-A | `OBS` observations and QC, `DST`/`EVS` device events | — |
 | JSON | — | the normalized content (`clinical-json`) |
 
