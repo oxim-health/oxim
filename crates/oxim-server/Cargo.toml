@@ -42,5 +42,11 @@ tempfile.workspace = true
 tokio = { workspace = true, features = ["io-util", "net"] }
 tower.workspace = true
 
+[features]
+# Include the built web UI (`ui/dist`, or the directory named by the
+# `OXIM_UI_DIST` environment variable at build time) in the library. Without
+# a built UI the server explains how to add one; Node is never required.
+embedded-ui = []
+
 [lints]
 workspace = true

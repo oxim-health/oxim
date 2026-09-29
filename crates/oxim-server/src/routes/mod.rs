@@ -6,6 +6,7 @@ pub(crate) mod channels;
 pub(crate) mod events;
 pub(crate) mod messages;
 pub(crate) mod metrics;
+pub(crate) mod schemas;
 pub(crate) mod tables;
 
 use std::sync::LazyLock;
@@ -45,6 +46,10 @@ pub(crate) struct Endpoint {
     pub(crate) body: Body,
     pub(crate) query: &'static [&'static str],
     pub(crate) status: u16,
+    /// Schema of the JSON request body, in `components.schemas`.
+    pub(crate) request: Option<&'static str>,
+    /// Schema of the JSON success response, in `components.schemas`.
+    pub(crate) response: Option<&'static str>,
 }
 
 const fn op(
@@ -61,6 +66,8 @@ const fn op(
         body: Body::None,
         query: &[],
         status: 200,
+        request: None,
+        response: None,
     }
 }
 
@@ -77,6 +84,19 @@ impl Endpoint {
 
     const fn status(mut self, status: u16) -> Self {
         self.status = status;
+        self
+    }
+
+    /// A JSON request body with the named schema.
+    const fn request(mut self, schema: &'static str) -> Self {
+        self.body = Body::Json;
+        self.request = Some(schema);
+        self
+    }
+
+    /// A JSON response with the named schema.
+    const fn response(mut self, schema: &'static str) -> Self {
+        self.response = Some(schema);
         self
     }
 }
@@ -98,7 +118,8 @@ pub(crate) const ENDPOINTS: &[Endpoint] = &[
         "Log in with a user name and password",
         None,
     )
-    .body(Body::Json),
+    .request("LoginRequest")
+    .response("LoginResponse"),
     op(
         "post",
         "/api/v1/auth/logout",
@@ -106,34 +127,37 @@ pub(crate) const ENDPOINTS: &[Endpoint] = &[
         ANY,
     )
     .status(204),
-    op("get", "/api/v1/auth/me", "The current user or token", ANY),
+    op("get", "/api/v1/auth/me", "The current user or token", ANY).response("Principal"),
     op(
         "post",
         "/api/v1/auth/password",
         "Change the current user's password",
         ANY,
     )
-    .body(Body::Json)
+    .request("PasswordChange")
     .status(204),
     op(
         "get",
         "/api/v1/channels",
         "List channel files with state and queue depth",
         needs(P::ViewChannels),
-    ),
+    )
+    .response("ChannelList"),
     op(
         "get",
         "/api/v1/channels/{id}",
         "A channel's YAML (may hold credentials, so editors only)",
         needs(P::EditChannels),
-    ),
+    )
+    .response("ChannelYaml"),
     op(
         "put",
         "/api/v1/channels/{id}",
         "Validate and save a channel's YAML",
         needs(P::EditChannels),
     )
-    .body(Body::Yaml),
+    .body(Body::Yaml)
+    .response("ChannelSaved"),
     op(
         "delete",
         "/api/v1/channels/{id}",
@@ -176,112 +200,125 @@ pub(crate) const ENDPOINTS: &[Endpoint] = &[
         "until",
         "before",
         "limit",
-    ]),
+    ])
+    .response("MessageList"),
     op(
         "get",
         "/api/v1/messages/{id}",
         "A message record and its stored contents",
         needs(P::ViewMessages),
-    ),
+    )
+    .response("MessageDetail"),
     op(
         "get",
         "/api/v1/messages/{id}/content",
         "One stage's content, masked unless permitted; audited",
         needs(P::ViewMessages),
     )
-    .query(&["stage", "destination"]),
+    .query(&["stage", "destination"])
+    .response("Content"),
     op(
         "post",
         "/api/v1/messages/{id}/content/unmasked",
         "Break-glass unmasked content with a reason; audited",
         needs(P::ViewMessages),
     )
-    .body(Body::Json),
+    .request("BreakGlassRequest")
+    .response("Content"),
     op(
         "post",
         "/api/v1/messages/{id}/reprocess",
         "Process a message again",
         needs(P::RepairMessages),
-    ),
+    )
+    .response("Reprocessed"),
     op(
         "post",
         "/api/v1/messages/{id}/requeue",
         "Retry a failed delivery now",
         needs(P::RepairMessages),
     )
-    .body(Body::Json)
-    .status(204),
+    .status(204)
+    .request("RequeueRequest"),
     op(
         "post",
         "/api/v1/messages/{id}/erase",
         "Delete a message and its contents; audited",
         needs(P::EraseMessages),
     )
-    .body(Body::Json)
-    .status(204),
+    .status(204)
+    .request("EraseRequest"),
     op(
         "get",
         "/api/v1/tables",
         "List code tables",
         needs(P::ViewTables),
-    ),
+    )
+    .response("TableList"),
     op(
         "get",
         "/api/v1/tables/{name}",
         "A code table's CSV",
         needs(P::ViewTables),
-    ),
+    )
+    .response("Table"),
     op(
         "put",
         "/api/v1/tables/{name}",
         "Validate and save a code table",
         needs(P::EditTables),
     )
-    .body(Body::Csv),
-    op("get", "/api/v1/users", "List users", needs(P::ManageUsers)),
+    .body(Body::Csv)
+    .response("TableSaved"),
+    op("get", "/api/v1/users", "List users", needs(P::ManageUsers)).response("UserList"),
     op(
         "post",
         "/api/v1/users",
         "Create a user",
         needs(P::ManageUsers),
     )
-    .body(Body::Json)
-    .status(201),
+    .request("CreateUser")
+    .status(201)
+    .response("User"),
     op(
         "patch",
         "/api/v1/users/{username}",
         "Change a user's name, role or disabled flag",
         needs(P::ManageUsers),
     )
-    .body(Body::Json),
+    .request("UpdateUser")
+    .response("User"),
     op(
         "post",
         "/api/v1/users/{username}/password",
         "Set a user's password",
         needs(P::ManageUsers),
     )
-    .body(Body::Json)
-    .status(204),
+    .status(204)
+    .request("SetPassword"),
     op(
         "delete",
         "/api/v1/users/{username}/sessions",
         "End every session of a user",
         needs(P::ManageUsers),
-    ),
+    )
+    .response("SessionsEnded"),
     op(
         "get",
         "/api/v1/tokens",
         "List API tokens",
         needs(P::ManageTokens),
-    ),
+    )
+    .response("TokenList"),
     op(
         "post",
         "/api/v1/tokens",
         "Create an API token (shown once)",
         needs(P::ManageTokens),
     )
-    .body(Body::Json)
-    .status(201),
+    .status(201)
+    .request("CreateToken")
+    .response("CreatedToken"),
     op(
         "delete",
         "/api/v1/tokens/{id}",
@@ -295,13 +332,15 @@ pub(crate) const ENDPOINTS: &[Endpoint] = &[
         "Query the audit trail",
         needs(P::ViewAudit),
     )
-    .query(&["message", "action", "actor", "limit"]),
+    .query(&["message", "action", "actor", "limit"])
+    .response("AuditList"),
     op(
         "get",
         "/api/v1/system",
         "Version, uptime and component types",
         needs(P::ViewSystem),
-    ),
+    )
+    .response("SystemInfo"),
     op(
         "get",
         "/api/v1/events",
@@ -438,7 +477,11 @@ fn operation(endpoint: &Endpoint) -> Value {
     };
     let mut ok = json!({ "description": success });
     if let Some(kind) = content_type {
-        ok["content"] = json!({ kind: {} });
+        let schema = match endpoint.response {
+            Some(name) => json!({ "schema": { "$ref": format!("#/components/schemas/{name}") } }),
+            None => json!({}),
+        };
+        ok["content"] = json!({ kind: schema });
     }
     responses.insert(endpoint.status.to_string(), ok);
     responses.insert("400".into(), error_response("Invalid request"));
@@ -475,7 +518,13 @@ fn operation(endpoint: &Endpoint) -> Value {
     }
     let body = match endpoint.body {
         Body::None => None,
-        Body::Json => Some(("application/json", json!({ "type": "object" }))),
+        Body::Json => Some((
+            "application/json",
+            match endpoint.request {
+                Some(name) => json!({ "$ref": format!("#/components/schemas/{name}") }),
+                None => json!({ "type": "object" }),
+            },
+        )),
         Body::Yaml => Some(("application/yaml", json!({ "type": "string" }))),
         Body::Csv => Some(("text/csv", json!({ "type": "string" }))),
     };
@@ -513,22 +562,7 @@ pub(crate) fn openapi_document() -> Value {
                 "bearer": { "type": "http", "scheme": "bearer" },
                 "session": { "type": "apiKey", "in": "cookie", "name": "oxim_session" },
             },
-            "schemas": {
-                "Error": {
-                    "type": "object",
-                    "required": ["error"],
-                    "properties": {
-                        "error": {
-                            "type": "object",
-                            "required": ["code", "message"],
-                            "properties": {
-                                "code": { "type": "string" },
-                                "message": { "type": "string" },
-                            },
-                        },
-                    },
-                },
-            },
+            "schemas": schemas::schemas(),
         },
         "paths": paths,
     })
