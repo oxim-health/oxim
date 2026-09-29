@@ -96,7 +96,23 @@ A file is picked up once its size and modification time are unchanged between tw
 
 Files are written to a hidden temporary file, flushed and renamed. Rewriting an identical file (after a retry) succeeds; a different existing file fails the delivery unless `overwrite` is set.
 
-## `http`: HTTP and HTTPS requests
+## `http`: HTTP and HTTPS
+
+### Source
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `listen` | required | Address to listen on, for example `0.0.0.0:8081` |
+| `path` | `/` | Accepted path prefix; other paths get `404` |
+| `methods` | `[POST, PUT]` | Accepted methods; others get `405` |
+| `max_body` | 16 MiB | Largest accepted body; larger bodies get `413` |
+| `max_connections` | `100` | Concurrent connections |
+| `status` | `200` | Status of the answer once a message is stored (2xx) |
+| `metadata_headers` | none | Request headers recorded as `http.header.<name>` metadata |
+| `auth` | none | `{type: basic, username, password_env}` or `{type: bearer, token_env}`; inline `password`/`token` are accepted but discouraged |
+| `tls` | none | TLS listener settings; see [TLS](#tls) |
+
+The request body is the message. Once it is stored the client gets `status` with `{"message_id": "..."}` and an `X-OXIM-Message-Id` header; when it cannot be stored the client gets `503` and should retry. A channel with `source.response` answers with the reply as the response body (with the media type of its data type); without a reply the JSON answer carries the processing status, with `500` when processing failed. `X-Correlation-ID` becomes the message's correlation identifier; `http.method`, `http.path` and `http.content_type` are recorded as metadata. Credentials are compared in constant time.
 
 ### Destination
 
