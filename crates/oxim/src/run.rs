@@ -11,7 +11,7 @@ use oxim_alert::{AlertEngine, Sources};
 use oxim_core::{ChannelConfig, Engine, EngineError, EngineOptions, SystemClock};
 use oxim_lab::OrderCache;
 use oxim_model::{ChannelId, Timestamp};
-use oxim_store::{PrunePolicy, SqliteStore};
+use oxim_store::{MessageStore, PrunePolicy, SqliteStore};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
@@ -22,6 +22,55 @@ use oxim_server::history::{Change, ChannelHistory};
 use crate::CliResult;
 use crate::components;
 use crate::settings::Settings;
+
+/// Opens the configured message store.
+fn open_store(settings: &Settings) -> CliResult<Box<dyn MessageStore>> {
+    let store = &settings.store;
+    match store.kind {
+        crate::settings::StoreKind::Sqlite => {
+            let database = settings.database_path();
+            let opened = match &store.encryption_key_env {
+                Some(name) => {
+                    let text = std::env::var(name)
+                        .map_err(|_| format!("the encryption key variable {name} is not set"))?;
+                    let key = oxim_store::cipher::parse_key(&text)?;
+                    SqliteStore::open_encrypted(&database, &key)
+                }
+                None => SqliteStore::open(&database),
+            }
+            .map_err(|e| format!("cannot open {}: {e}", database.display()))?;
+            Ok(Box::new(opened))
+        }
+        crate::settings::StoreKind::Postgres => {
+            let name = store
+                .url_env
+                .clone()
+                .ok_or("store type postgres needs url_env")?;
+            let url = std::env::var(&name)
+                .map_err(|_| format!("the database URL variable {name} is not set"))?;
+            let tls: Option<oxim_connectors::tls::ClientTlsSettings> = store
+                .tls
+                .clone()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|e| format!("store tls: {e}"))?;
+            let node = store.node_id.clone().unwrap_or_else(|| {
+                std::env::var("COMPUTERNAME")
+                    .or_else(|_| std::env::var("HOSTNAME"))
+                    .unwrap_or_else(|_| "oxim".to_owned())
+            });
+            // The synchronous client must not start inside the async
+            // runtime, so it connects on a plain thread.
+            let connected = std::thread::spawn(move || {
+                oxim_store_postgres::PostgresStore::connect(&url, tls.as_ref(), &node)
+            })
+            .join()
+            .map_err(|_| "connecting to PostgreSQL failed")?
+            .map_err(|e| format!("cannot open the PostgreSQL store: {e}"))?;
+            Ok(Box::new(connected))
+        }
+    }
+}
 
 /// Runs the engine until `shutdown` completes.
 pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) -> CliResult<()> {
@@ -40,21 +89,14 @@ pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) 
             .map_err(|e| format!("cannot open {}: {e}", history_path.display()))?,
     );
     let database = settings.database_path();
-    let store = SqliteStore::open(&database)
-        .map_err(|e| format!("cannot open {}: {e}", database.display()))?;
+    let store = open_store(&settings)?;
     let mut options = EngineOptions::default();
     options.processing_queue = settings.engine.processing_queue;
     options.shutdown_grace = settings.engine.shutdown_grace.0;
     options.idle_poll = settings.engine.idle_poll.0;
     let components = components::build(&settings);
     let devices = components.devices.clone();
-    let engine = Engine::start(
-        Box::new(store),
-        components.registry,
-        Arc::new(SystemClock),
-        options,
-    )
-    .await?;
+    let engine = Engine::start(store, components.registry, Arc::new(SystemClock), options).await?;
     let alerts = match AlertEngine::new(settings.alerts.clone(), engine.registry()) {
         Ok(alerts) => Arc::new(alerts),
         Err(e) => {

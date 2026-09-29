@@ -39,6 +39,8 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-cda`](crates/oxim-cda) | HL7 CDA R2 header and section extraction, laboratory results and report generation |
 | [`crates/oxim-lab`](crates/oxim-lab) | Laboratory workflows: order cache, host query answers, test routing and worklist download |
 | [`crates/oxim-alert`](crates/oxim-alert) | Alert engine: queue, error, device silence, disk and certificate rules; email, webhook, Teams, Slack, syslog and SNMP notifications |
+| [`crates/oxim-shadow`](crates/oxim-shadow) | Shadow mode: replay captured Mirth Connect traffic (PCAP/PCAPNG, .oximcap) through a channel and compare the outputs |
+| [`crates/oxim-store-postgres`](crates/oxim-store-postgres) | PostgreSQL message store for clusters |
 | [`crates/oxim-script`](crates/oxim-script) | JavaScript filters, transformers and encoders in an embedded QuickJS sandbox, with Mirth Connect compatibility |
 | [`crates/oxim-connectors`](crates/oxim-connectors) | Source and destination connectors: MLLP, raw TCP, files, HTTP, ASTM over TCP and serial, POCT1-A |
 | [`crates/oxim-connectors-db`](crates/oxim-connectors-db) | Database connectors: PostgreSQL, MySQL/MariaDB, SQL Server and SQLite polling readers and writers |

@@ -117,7 +117,7 @@ pub fn reassemble(segments: &[Segment]) -> Vec<Stream> {
         .into_iter()
         .filter_map(|key| {
             let assembly = assemblies.remove(&key)?;
-            (!assembly.chunks.is_empty()).then(|| Stream {
+            (!assembly.chunks.is_empty()).then_some(Stream {
                 source: key.0,
                 destination: key.1,
                 chunks: assembly.chunks,

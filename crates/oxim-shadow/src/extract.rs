@@ -86,10 +86,7 @@ pub fn messages(chunks: &[Chunk], framing: Framing) -> Vec<Captured> {
             for chunk in chunks {
                 last = chunk.timestamp;
                 buffer.extend_from_slice(&chunk.data);
-                loop {
-                    let Some(&first) = buffer.first() else {
-                        break;
-                    };
+                while let Some(&first) = buffer.first() {
                     if first != STX {
                         if first == EOT || first == ENQ {
                             // A transmission ends or starts: flush what is
