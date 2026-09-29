@@ -1,0 +1,30 @@
+[package]
+name = "oxim-transform"
+description = "Declarative filters, mapping operations and code tables for OXIM channels"
+keywords = ["healthcare", "interoperability", "mapping", "hl7", "code-tables"]
+categories = ["text-processing"]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+oxim-core.workspace = true
+oxim-formats.workspace = true
+oxim-model.workspace = true
+regex.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+oxim-store.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true
