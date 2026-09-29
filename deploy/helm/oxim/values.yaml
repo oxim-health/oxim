@@ -40,6 +40,12 @@ config:
   reload:
     enabled: true
     interval: 5s
+  # -- Web UI, REST API and /metrics. Expose it through the `http` Service
+  # port, ideally behind an Ingress with TLS. Create the first user with
+  # `kubectl -n <ns> exec oxim-0 -- oxim -c /etc/oxim/oxim.yaml users create-admin`.
+  server:
+    enabled: true
+    listen: 0.0.0.0:8080
 
 # -- Channel files, mounted in /etc/oxim/channels. Keys are file names ending
 # in .yaml. Changes are picked up by the running engine without a restart
@@ -78,6 +84,9 @@ service:
   # -- One entry per listener that channels open. port is the Service port,
   # targetPort the port the channel listens on (defaults to port).
   ports:
+    - name: http
+      port: 8080
+      protocol: TCP
     - name: mllp
       port: 2575
       protocol: TCP

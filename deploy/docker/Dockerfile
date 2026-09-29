@@ -21,11 +21,14 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release --locked -p oxim -p oxim-sim \
     && install -D -m 0755 target/release/oxim /out/usr/bin/oxim \
     && install -D -m 0755 target/release/oxim-sim /out/usr/bin/oxim-sim
-# The default configuration comes from `oxim init`; only the data directory
-# moves to the volume.
+# The default configuration comes from `oxim init`; the data directory
+# moves to the volume and the web server listens on all interfaces of the
+# container (publish it only where it is needed; see docs/install/docker.md).
 RUN /out/usr/bin/oxim init --dir /out/etc/oxim \
     && sed -i 's|^data_dir: data$|data_dir: /var/lib/oxim|' /out/etc/oxim/oxim.yaml \
     && grep -q '^data_dir: /var/lib/oxim$' /out/etc/oxim/oxim.yaml \
+    && sed -i 's|^  listen: 127.0.0.1:8080 .*$|  listen: 0.0.0.0:8080|' /out/etc/oxim/oxim.yaml \
+    && grep -q '^  listen: 0.0.0.0:8080$' /out/etc/oxim/oxim.yaml \
     && rmdir /out/etc/oxim/data
 
 FROM debian:${DEBIAN_RELEASE}-slim AS base
@@ -62,8 +65,9 @@ RUN chmod -R g-w,o-rwx /etc/oxim \
 # resolve against the working directory, which is on the volume.
 WORKDIR /var/lib/oxim
 VOLUME ["/var/lib/oxim"]
-# The example channel of `oxim init` listens for HL7 v2 over MLLP on 2575.
-EXPOSE 2575
+# The example channel of `oxim init` listens for HL7 v2 over MLLP on 2575;
+# the web UI and REST API listen on 8080.
+EXPOSE 2575 8080
 USER 10001:10001
 ENTRYPOINT ["oxim"]
 CMD ["run", "-c", "/etc/oxim/oxim.yaml"]

@@ -31,6 +31,18 @@ The service writes daily log files to `%ProgramData%\OXIM\logs`. Channel files a
 
 Serial analyzers are configured with the port name, for example `COM3`.
 
+## First user
+
+The web UI and REST API start once a user exists. From an elevated prompt, create the first administrator (the password is asked for without echo) and restart the service:
+
+```bat
+oxim -c "%ProgramData%\OXIM\oxim.yaml" users create-admin --username admin
+oxim service stop
+oxim service start
+```
+
+Then open `http://127.0.0.1:8080`. For access from other machines set `server.listen` together with `server.tls` in `oxim.yaml`.
+
 ## Service account
 
 The service runs as LocalSystem, like `oxim service install`. To run it with fewer privileges, create a dedicated account (or use the virtual account `NT SERVICE\oxim`), grant it full control of `%ProgramData%\OXIM` and set it in the service properties (`services.msc`, Log On tab).

@@ -24,6 +24,13 @@ docker logs -f oxim
 
 Publish the ports your channels listen on. Channels must listen on `0.0.0.0` (or the container's address) to be reachable from outside the container. Channel files are picked up while the container runs.
 
+The image's web server listens on port 8080 inside the container. Publish it only where it is needed, for example `-p 127.0.0.1:8080:8080`, and create the first administrator:
+
+```sh
+docker exec -it oxim oxim -c /etc/oxim/oxim.yaml users create-admin --username admin
+docker restart oxim
+```
+
 Check the channels:
 
 ```sh
