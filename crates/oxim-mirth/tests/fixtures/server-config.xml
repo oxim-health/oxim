@@ -1,0 +1,402 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic Mirth Connect 3.9 server configuration backup written for the OXIM test suite. -->
+<serverConfiguration version="3.9.1">
+  <date>2026-09-29 10:00:00</date>
+  <channelGroups>
+    <channelGroup version="3.9.1">
+      <id>group-1</id>
+      <name>Laboratory</name>
+      <revision>1</revision>
+      <channels>
+        <channel version="3.9.1">
+          <id>0d2e4c1a-5b6f-4a7e-9c8d-300000000001</id>
+          <revision>0</revision>
+        </channel>
+      </channels>
+    </channelGroup>
+  </channelGroups>
+  <channels>
+    <channel version="3.9.1">
+      <id>0d2e4c1a-5b6f-4a7e-9c8d-300000000001</id>
+      <name>Lab Feed</name>
+      <description>Picks up delimited export files.</description>
+      <sourceConnector version="3.9.1">
+        <metaDataId>0</metaDataId>
+        <name>sourceConnector</name>
+        <properties class="com.mirth.connect.connectors.file.FileReceiverProperties" version="3.9.1">
+          <pollConnectorProperties version="3.9.1">
+            <pollingType>INTERVAL</pollingType>
+            <pollOnStart>false</pollOnStart>
+            <pollingFrequency>10000</pollingFrequency>
+          </pollConnectorProperties>
+          <sourceConnectorProperties version="3.9.1">
+            <responseVariable>None</responseVariable>
+          </sourceConnectorProperties>
+          <scheme>FILE</scheme>
+          <host>${inbox}</host>
+          <fileFilter>*.csv</fileFilter>
+          <regex>false</regex>
+          <directoryRecursion>false</directoryRecursion>
+          <ignoreDot>true</ignoreDot>
+          <afterProcessingAction>MOVE</afterProcessingAction>
+          <moveToDirectory>${inbox}/done</moveToDirectory>
+          <moveToFileName></moveToFileName>
+          <errorReadingAction>MOVE</errorReadingAction>
+          <errorMoveToDirectory>${inbox}/error</errorMoveToDirectory>
+          <checkFileAge>true</checkFileAge>
+          <fileAge>1000</fileAge>
+          <ignoreFileSizeMaximum>false</ignoreFileSizeMaximum>
+          <fileSizeMaximum>1048576</fileSizeMaximum>
+          <sortBy>name</sortBy>
+          <binary>false</binary>
+          <charsetEncoding>DEFAULT_ENCODING</charsetEncoding>
+        </properties>
+        <transformer version="3.9.1">
+          <elements/>
+          <inboundDataType>DELIMITED</inboundDataType>
+          <outboundDataType>DELIMITED</outboundDataType>
+          <inboundProperties class="com.mirth.connect.plugins.datatypes.delimited.DelimitedDataTypeProperties" version="3.9.1">
+            <serializationProperties class="com.mirth.connect.plugins.datatypes.delimited.DelimitedSerializationProperties" version="3.9.1">
+              <columnDelimiter>;</columnDelimiter>
+              <recordDelimiter>\n</recordDelimiter>
+              <quoteToken>"</quoteToken>
+              <escapeWithDoubleQuote>true</escapeWithDoubleQuote>
+              <numberedRows>false</numberedRows>
+              <ignoreCR>true</ignoreCR>
+            </serializationProperties>
+            <batchProperties class="com.mirth.connect.plugins.datatypes.delimited.DelimitedBatchProperties" version="3.9.1">
+              <batchSkipRecords>1</batchSkipRecords>
+            </batchProperties>
+          </inboundProperties>
+        </transformer>
+        <filter version="3.9.1">
+          <elements>
+            <com.mirth.connect.plugins.javascriptrule.JavaScriptRule version="3.9.1">
+              <name>Non-empty</name>
+              <sequenceNumber>0</sequenceNumber>
+              <enabled>true</enabled>
+              <operator>NONE</operator>
+              <script>return msg.toString().length &gt; 0 &amp;&amp; isValid(msg);</script>
+            </com.mirth.connect.plugins.javascriptrule.JavaScriptRule>
+          </elements>
+        </filter>
+        <transportName>File Reader</transportName>
+        <mode>SOURCE</mode>
+        <enabled>true</enabled>
+        <waitForPrevious>true</waitForPrevious>
+      </sourceConnector>
+      <destinationConnectors>
+        <connector version="3.9.1">
+          <metaDataId>1</metaDataId>
+          <name>LIS REST</name>
+          <properties class="com.mirth.connect.connectors.http.HttpDispatcherProperties" version="3.9.1">
+            <destinationConnectorProperties version="3.9.1">
+              <queueEnabled>true</queueEnabled>
+              <retryIntervalMillis>0</retryIntervalMillis>
+              <rotate>false</rotate>
+            </destinationConnectorProperties>
+            <host>${lis_url}</host>
+            <method>put</method>
+            <headers class="linked-hash-map">
+              <entry>
+                <string>Accept</string>
+                <string>application/json</string>
+              </entry>
+            </headers>
+            <parameters class="linked-hash-map"/>
+            <useAuthentication>false</useAuthentication>
+            <content>{"data": "${message.encodedData}"}</content>
+            <contentType>application/json</contentType>
+            <socketTimeout>30000</socketTimeout>
+          </properties>
+          <transformer version="3.9.1">
+            <elements/>
+            <inboundDataType>DELIMITED</inboundDataType>
+            <outboundDataType>DELIMITED</outboundDataType>
+          </transformer>
+          <transportName>HTTP Sender</transportName>
+          <mode>DESTINATION</mode>
+          <enabled>true</enabled>
+          <waitForPrevious>true</waitForPrevious>
+        </connector>
+      </destinationConnectors>
+      <preprocessingScript>return message;</preprocessingScript>
+      <postprocessingScript>return;</postprocessingScript>
+      <deployScript>return;</deployScript>
+      <undeployScript>return;</undeployScript>
+      <properties version="3.9.1">
+        <initialState>STARTED</initialState>
+      </properties>
+      <exportData>
+        <metadata>
+          <enabled>true</enabled>
+        </metadata>
+      </exportData>
+    </channel>
+    <channel version="3.9.1">
+      <id>0d2e4c1a-5b6f-4a7e-9c8d-300000000002</id>
+      <name>Lab Feed</name>
+      <description></description>
+      <sourceConnector version="3.9.1">
+        <metaDataId>0</metaDataId>
+        <properties class="com.mirth.connect.connectors.tcp.TcpReceiverProperties" version="3.9.1">
+          <listenerConnectorProperties version="3.9.1">
+            <host>0.0.0.0</host>
+            <port>6662</port>
+          </listenerConnectorProperties>
+          <sourceConnectorProperties version="3.9.1">
+            <responseVariable>None</responseVariable>
+          </sourceConnectorProperties>
+          <transmissionModeProperties class="com.mirth.connect.plugins.mllpmode.MLLPModeProperties">
+            <pluginPointName>MLLP</pluginPointName>
+            <startOfMessageBytes>0B</startOfMessageBytes>
+            <endOfMessageBytes>1C0D</endOfMessageBytes>
+          </transmissionModeProperties>
+          <serverMode>true</serverMode>
+        </properties>
+        <transformer version="3.9.1">
+          <elements/>
+          <inboundDataType>HL7V2</inboundDataType>
+          <outboundDataType>HL7V2</outboundDataType>
+        </transformer>
+        <filter version="3.9.1">
+          <elements>
+            <com.mirth.connect.plugins.rulebuilder.RuleBuilderRule version="3.9.1">
+              <name>Chemistry</name>
+              <sequenceNumber>0</sequenceNumber>
+              <enabled>true</enabled>
+              <operator>NONE</operator>
+              <field>msg['MSH']['MSH.3']['MSH.3.1'].toString()</field>
+              <condition>EQUALS</condition>
+              <values>
+                <string>'CHEM'</string>
+              </values>
+            </com.mirth.connect.plugins.rulebuilder.RuleBuilderRule>
+            <com.mirth.connect.plugins.rulebuilder.RuleBuilderRule version="3.9.1">
+              <name>Urgent</name>
+              <sequenceNumber>1</sequenceNumber>
+              <enabled>true</enabled>
+              <operator>AND</operator>
+              <field>msg['ORC']['ORC.7']['ORC.7.6'].toString()</field>
+              <condition>EQUALS</condition>
+              <values>
+                <string>'S'</string>
+              </values>
+            </com.mirth.connect.plugins.rulebuilder.RuleBuilderRule>
+            <com.mirth.connect.plugins.rulebuilder.RuleBuilderRule version="3.9.1">
+              <name>Or hematology</name>
+              <sequenceNumber>2</sequenceNumber>
+              <enabled>true</enabled>
+              <operator>OR</operator>
+              <field>msg['MSH']['MSH.3']['MSH.3.1'].toString()</field>
+              <condition>CONTAINS</condition>
+              <values>
+                <string>'HEMA'</string>
+                <string>'CBC.'</string>
+              </values>
+            </com.mirth.connect.plugins.rulebuilder.RuleBuilderRule>
+          </elements>
+        </filter>
+        <transportName>TCP Listener</transportName>
+        <mode>SOURCE</mode>
+        <enabled>true</enabled>
+        <waitForPrevious>true</waitForPrevious>
+      </sourceConnector>
+      <destinationConnectors>
+        <connector version="3.9.1">
+          <metaDataId>1</metaDataId>
+          <name>Destination 1</name>
+          <properties class="com.mirth.connect.connectors.vm.VmDispatcherProperties" version="3.9.1">
+            <channelId>0d2e4c1a-5b6f-4a7e-9c8d-300000000003</channelId>
+          </properties>
+          <transportName>Channel Writer</transportName>
+          <mode>DESTINATION</mode>
+          <enabled>true</enabled>
+          <waitForPrevious>true</waitForPrevious>
+        </connector>
+        <connector version="3.9.1">
+          <metaDataId>2</metaDataId>
+          <name>Destination 1</name>
+          <properties class="com.mirth.connect.connectors.tcp.TcpDispatcherProperties" version="3.9.1">
+            <destinationConnectorProperties version="3.9.1">
+              <queueEnabled>false</queueEnabled>
+              <retryIntervalMillis>1500</retryIntervalMillis>
+              <retryCount>2</retryCount>
+            </destinationConnectorProperties>
+            <transmissionModeProperties class="com.mirth.connect.model.transmission.framemode.FrameModeProperties">
+              <pluginPointName>Basic</pluginPointName>
+              <startOfMessageBytes></startOfMessageBytes>
+              <endOfMessageBytes></endOfMessageBytes>
+            </transmissionModeProperties>
+            <serverMode>false</serverMode>
+            <remoteAddress>10.0.0.30</remoteAddress>
+            <remotePort>9100</remotePort>
+            <responseTimeout>5000</responseTimeout>
+            <ignoreResponse>true</ignoreResponse>
+          </properties>
+          <transportName>TCP Sender</transportName>
+          <mode>DESTINATION</mode>
+          <enabled>true</enabled>
+          <waitForPrevious>true</waitForPrevious>
+        </connector>
+        <connector version="3.9.1">
+          <metaDataId>3</metaDataId>
+          <name>Destination 1</name>
+          <properties class="com.mirth.connect.connectors.file.FileDispatcherProperties" version="3.9.1">
+            <scheme>FILE</scheme>
+            <host>/var/lib/lab/journal</host>
+            <outputPattern>journal.txt</outputPattern>
+            <outputAppend>true</outputAppend>
+          </properties>
+          <transportName>File Writer</transportName>
+          <mode>DESTINATION</mode>
+          <enabled>true</enabled>
+          <waitForPrevious>true</waitForPrevious>
+        </connector>
+      </destinationConnectors>
+      <properties version="3.9.1">
+        <initialState>STARTED</initialState>
+      </properties>
+      <exportData>
+        <metadata>
+          <enabled>true</enabled>
+        </metadata>
+      </exportData>
+    </channel>
+    <channel version="3.9.1">
+      <id>0d2e4c1a-5b6f-4a7e-9c8d-300000000003</id>
+      <name>Warehouse Import</name>
+      <sourceConnector version="3.9.1">
+        <metaDataId>0</metaDataId>
+        <properties class="com.mirth.connect.connectors.jdbc.DatabaseReceiverProperties" version="3.9.1">
+          <driver>org.postgresql.Driver</driver>
+          <url>jdbc:postgresql://db.example.org:5432/lab</url>
+          <select>SELECT * FROM pending</select>
+        </properties>
+        <transformer version="3.9.1">
+          <elements>
+            <com.mirth.connect.plugins.javascriptstep.JavaScriptStep version="3.9.1">
+              <name>Wrap</name>
+              <sequenceNumber>0</sequenceNumber>
+              <enabled>true</enabled>
+              <script>tmp = msg;</script>
+            </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+          </elements>
+          <inboundDataType>XML</inboundDataType>
+          <outboundDataType>XML</outboundDataType>
+        </transformer>
+        <transportName>Database Reader</transportName>
+        <mode>SOURCE</mode>
+        <enabled>true</enabled>
+      </sourceConnector>
+      <destinationConnectors>
+        <connector version="3.9.1">
+          <metaDataId>1</metaDataId>
+          <name>Out</name>
+          <properties class="com.mirth.connect.connectors.file.FileDispatcherProperties" version="3.9.1">
+            <scheme>SFTP</scheme>
+            <host>sftp.example.org/out</host>
+            <outputPattern>${message.messageId}.xml</outputPattern>
+          </properties>
+          <transportName>File Writer</transportName>
+          <mode>DESTINATION</mode>
+          <enabled>true</enabled>
+        </connector>
+      </destinationConnectors>
+      <properties version="3.9.1">
+        <initialState>STARTED</initialState>
+      </properties>
+      <exportData>
+        <metadata>
+          <enabled>false</enabled>
+        </metadata>
+      </exportData>
+    </channel>
+  </channels>
+  <alerts>
+    <alertModel version="3.9.1">
+      <id>alert-1</id>
+      <name>Errors</name>
+      <enabled>true</enabled>
+    </alertModel>
+  </alerts>
+  <codeTemplateLibraries>
+    <codeTemplateLibrary version="3.9.1">
+      <id>7a1b2c3d-0000-4000-8000-000000000020</id>
+      <name>Validation</name>
+      <revision>1</revision>
+      <includeNewChannels>true</includeNewChannels>
+      <enabledChannelIds/>
+      <disabledChannelIds>
+        <string>0d2e4c1a-5b6f-4a7e-9c8d-300000000002</string>
+      </disabledChannelIds>
+      <codeTemplates>
+        <codeTemplate version="3.9.1">
+          <id>7a1b2c3d-0000-4000-8000-000000000021</id>
+          <name>isValid</name>
+          <revision>1</revision>
+          <properties class="com.mirth.connect.model.codetemplates.BasicCodeTemplateProperties">
+            <type>FUNCTION</type>
+            <code>function isValid(message) {
+	return message.toString().indexOf(';') != -1;
+}</code>
+          </properties>
+        </codeTemplate>
+        <codeTemplate version="3.9.1">
+          <id>7a1b2c3d-0000-4000-8000-000000000022</id>
+          <name>Log helper</name>
+          <revision>1</revision>
+          <properties class="com.mirth.connect.model.codetemplates.BasicCodeTemplateProperties">
+            <type>DRAG_AND_DROP_CODE</type>
+            <code>logger.info(isValid(msg));</code>
+          </properties>
+        </codeTemplate>
+      </codeTemplates>
+    </codeTemplateLibrary>
+  </codeTemplateLibraries>
+  <globalScripts>
+    <entry>
+      <string>Deploy</string>
+      <string>// This script executes once when all channels start up from a redeploy
+// You only have access to the globalMap here to persist data
+return;</string>
+    </entry>
+    <entry>
+      <string>Undeploy</string>
+      <string>return;</string>
+    </entry>
+    <entry>
+      <string>Preprocessor</string>
+      <string>// Modify the message variable below to pre process data
+// This script applies across all channels
+message = message.trim();
+return message;</string>
+    </entry>
+    <entry>
+      <string>Postprocessor</string>
+      <string>return;</string>
+    </entry>
+  </globalScripts>
+  <configurationMap>
+    <entry>
+      <string>inbox</string>
+      <com.mirth.connect.util.ConfigurationProperty>
+        <value>/var/lib/lab/inbox</value>
+        <comment>Where the analyzer drops files</comment>
+      </com.mirth.connect.util.ConfigurationProperty>
+    </entry>
+    <entry>
+      <string>lis_url</string>
+      <com.mirth.connect.util.ConfigurationProperty>
+        <value>https://lis.example.org/api/results</value>
+        <comment></comment>
+      </com.mirth.connect.util.ConfigurationProperty>
+    </entry>
+  </configurationMap>
+  <users>
+    <user version="3.9.1">
+      <id>1</id>
+      <username>admin</username>
+    </user>
+  </users>
+</serverConfiguration>

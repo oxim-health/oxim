@@ -1,0 +1,20 @@
+# Imported from Mirth Connect channel "Glucose meters" (9f000000-0000-4000-8000-000000000002) by oxim-mirth.
+# Migration report: 3 converted, 0 approximated, 1 unsupported item(s).
+# DRAFT: OXIM has no equivalent for the Mirth source connector yet. Replace the
+# source and rename this file to .yaml; OXIM does not load .yaml.draft files.
+
+id: glucose-meters
+name: Glucose meters
+enabled: false
+source:
+  type: unsupported
+  data_type: json
+  settings: {mirth_transport: HTTP Listener}
+destinations:
+- id: archive
+  type: file
+  queue: {retry: {initial_delay: "60s", max_delay: "60s", multiplier: 1}}
+  settings:
+    directory: /var/lib/poc
+    filename: "{message_id}.json"
+    overwrite: true

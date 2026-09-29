@@ -1,0 +1,8 @@
+# Imported from Mirth Connect channel "Retired meters" (9f000000-0000-4000-8000-000000000003) by oxim-mirth.
+# Migration report: 2 converted, 0 approximated, 0 unsupported item(s).
+
+id: retired-meters
+name: Retired meters
+enabled: false
+source: {type: mllp, data_type: hl7v2, settings: {listen: "0.0.0.0:6700"}}
+destinations: []

@@ -51,6 +51,7 @@ oxim-formats = { path = "crates/oxim-formats" }
 oxim-hl7 = { path = "crates/oxim-hl7" }
 oxim-lab = { path = "crates/oxim-lab" }
 oxim-mapping = { path = "crates/oxim-mapping" }
+oxim-mirth = { path = "crates/oxim-mirth" }
 oxim-mllp = { path = "crates/oxim-mllp" }
 oxim-model = { path = "crates/oxim-model" }
 oxim-poct1a = { path = "crates/oxim-poct1a" }

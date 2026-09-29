@@ -1,0 +1,105 @@
+# Imported from Mirth Connect channel "Lab Results: Analyzer -> LIS" (0d2e4c1a-5b6f-4a7e-9c8d-200000000002) by oxim-mirth.
+# Migration report: 12 converted, 12 approximated, 4 unsupported item(s).
+
+id: lab-results-analyzer-lis
+name: "Lab Results: Analyzer -> LIS"
+enabled: false
+source:
+  type: tcp
+  data_type: hl7v2
+  settings:
+    listen: "0.0.0.0:5200"
+    framing: {mode: delimited, start: "hex:02", end: "hex:03"}
+    max_connections: 5
+filters:
+- type: script
+  mirth: true
+  source: |-
+    // Mirth filter rules joined with AND and OR
+    // source filter rule "Results" (RuleBuilderRule)
+    function rule1() {
+        return (String(msg['MSH']['MSH.9']['MSH.9.1'].toString()) == 'ORU');
+    }
+
+    // source filter rule "Or QC flagged" (JavaScriptRule)
+    function rule2() {
+        return $('qc') == 'yes';
+    }
+
+    return rule1() || rule2();
+transformers:
+- type: script
+  mirth: true
+  source: |-
+    // Mirth transformer step: Normalize name
+    // Code template "formatName" (library "Name utilities")
+    function formatName(value) {
+    	return capitalize(value.trim());
+    }
+
+    // Code template "capitalize" (library "Name utilities")
+    function capitalize(value) {
+    	return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+    }
+
+    msg['PID']['PID.5']['PID.5.1'] = formatName(msg['PID']['PID.5']['PID.5.1'].toString());
+    if (msg['OBX'].length() > 0) {
+    	channelMap.put('hasResults', 'yes');
+    }
+- type: script
+  mirth: true
+  source: |-
+    // Mirth transformer step: cleanId
+    var mapping;
+    try {
+        mapping = msg['PID']['PID.3']['PID.3.1'].toString();
+    } catch (e) {
+        mapping = '';
+    }
+    mapping = (mapping === undefined || mapping === null) ? '' : String(mapping);
+    if (mapping.length == 0) {
+        mapping = '';
+    }
+    mapping = mapping.replace(new RegExp('^0+', 'g'), '');
+    channelMap.put('cleanId', mapping);
+- type: script
+  mirth: true
+  source: |-
+    // Mirth transformer step: lastAnalyzer
+    var mapping;
+    try {
+        mapping = msg['MSH']['MSH.3']['MSH.3.1'].toString();
+    } catch (e) {
+        mapping = '';
+    }
+    mapping = (mapping === undefined || mapping === null) ? '' : String(mapping);
+    if (mapping.length == 0) {
+        mapping = '';
+    }
+    globalMap.put('lastAnalyzer', mapping);
+- type: script
+  mirth: true
+  source: |-
+    // Mirth transformer step: Route copy
+    router.routeMessage('Audit', message);
+destinations:
+- id: lis
+  type: mllp
+  queue:
+    ordering: best_effort
+    retry: {initial_delay: "30s", max_delay: "30s", multiplier: 1}
+  settings: {target: "lis.example.org:2575", ack_timeout: "15s"}
+- id: portal
+  type: http
+  filters: [{type: path-equals, path: OBR-25, value: F}]
+  queue:
+    retry:
+      initial_delay: "10s"
+      max_delay: "10s"
+      multiplier: 1
+      max_attempts: 4
+  settings:
+    url: "https://portal.example.org/api/results?format=hl7%20v2"
+    headers: {X-Source: oxim-test}
+    content_type: x-application/hl7-v2+er7
+    timeout: "20s"
