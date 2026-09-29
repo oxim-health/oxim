@@ -69,6 +69,7 @@ oxim-poct1a = { path = "crates/oxim-poct1a" }
 oxim-store = { path = "crates/oxim-store" }
 oxim-transform = { path = "crates/oxim-transform" }
 
+rcgen = "0.14"
 proptest = "1.5"
 tempfile = "3"
 

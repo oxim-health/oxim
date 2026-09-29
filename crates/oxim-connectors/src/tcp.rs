@@ -23,6 +23,7 @@
 //! | `error_response` | none | Bytes sent when a message could not be stored, for example `hex:15` |
 //! | `max_connections` | `100` | Concurrent connections |
 //! | `max_message_len` | 16 MiB | Largest accepted message |
+//! | `tls` | none | TLS listener settings (certificate, key, optional client CA for mutual TLS); see [`tls`](crate::tls) |
 //!
 //! Responses are written as-is, without framing. With framing `none`, the
 //! response is sent and the connection closed after the message is stored.
@@ -38,6 +39,7 @@
 //! | `wait_for_response` | `false` | Read one framed response after each message |
 //! | `expected_response` | none | When set, a response that differs fails the attempt (retried) |
 //! | `max_message_len` | 16 MiB | Largest accepted response |
+//! | `tls` | none | TLS sender settings (`tls: {}` for defaults; CA, client certificate for mutual TLS); see [`tls`](crate::tls) |
 //!
 //! Connections are reused between messages, except with framing `none`,
 //! where each message uses its own connection and the response (if waited
@@ -56,11 +58,11 @@ use oxim_core::{
 use oxim_store::Delivery;
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
 
-use crate::net::{DEFAULT_MAX_MESSAGE, parse_bytes, serve, settings};
+use crate::net::{DEFAULT_MAX_MESSAGE, ListenerTls, parse_bytes, serve, settings};
+use crate::tls::{ClientTlsSettings, Dialer, ServerTlsSettings, Stream};
 
 const READ_BUFFER: usize = 64 * 1024;
 
@@ -346,6 +348,9 @@ pub struct TcpSourceSettings {
     /// Largest accepted message.
     #[serde(default = "default_max_message_len")]
     pub max_message_len: usize,
+    /// TLS, optionally with client certificates (mutual TLS).
+    #[serde(default)]
+    pub tls: Option<ServerTlsSettings>,
 }
 
 #[derive(Debug)]
@@ -361,6 +366,7 @@ struct SourceSetup {
 pub struct TcpSource {
     listen: String,
     max_connections: usize,
+    tls: Option<ListenerTls>,
     setup: Arc<SourceSetup>,
 }
 
@@ -375,6 +381,7 @@ impl TcpSource {
         Ok(Self {
             listen: settings.listen.clone(),
             max_connections: settings.max_connections,
+            tls: ListenerTls::from_settings(settings.tls.as_ref())?,
             setup: Arc::new(SourceSetup {
                 framing: Framing::from_settings(&settings.framing)?,
                 response: bytes(&settings.response)?,
@@ -394,6 +401,7 @@ impl SourceConnector for TcpSource {
             &context,
             &self.listen,
             self.max_connections,
+            self.tls.clone(),
             move |stream, peer| {
                 source_connection(handler_context.clone(), setup.clone(), stream, peer)
             },
@@ -405,7 +413,7 @@ impl SourceConnector for TcpSource {
 async fn source_connection(
     context: SourceContext,
     setup: Arc<SourceSetup>,
-    mut stream: TcpStream,
+    mut stream: Stream,
     peer: SocketAddr,
 ) {
     let mut framer = Framer::new(setup.framing.clone(), setup.max_message_len);
@@ -494,6 +502,9 @@ pub struct TcpDestinationSettings {
     /// Largest accepted response.
     #[serde(default = "default_max_message_len")]
     pub max_message_len: usize,
+    /// TLS, optionally with a client certificate (mutual TLS).
+    #[serde(default)]
+    pub tls: Option<ClientTlsSettings>,
 }
 
 /// Sends framed messages over raw TCP.
@@ -502,7 +513,8 @@ pub struct TcpDestination {
     settings: TcpDestinationSettings,
     framing: Framing,
     expected: Option<Vec<u8>>,
-    connection: Mutex<Option<(TcpStream, Framer)>>,
+    dialer: Dialer,
+    connection: Mutex<Option<(Stream, Framer)>>,
 }
 
 impl TcpDestination {
@@ -514,23 +526,22 @@ impl TcpDestination {
             .as_deref()
             .map(|text| parse_bytes(text).map_err(EngineError::Config))
             .transpose()?;
+        let dialer = Dialer::new(
+            &settings.target,
+            settings.connect_timeout.0,
+            settings.tls.as_ref(),
+        )?;
         Ok(Self {
             settings,
             framing,
             expected,
+            dialer,
             connection: Mutex::new(None),
         })
     }
 
-    async fn connect(&self) -> Result<TcpStream, SendError> {
-        let target = &self.settings.target;
-        let stream =
-            tokio::time::timeout(self.settings.connect_timeout.0, TcpStream::connect(target))
-                .await
-                .map_err(|_| SendError::temporary(format!("connecting to {target} timed out")))?
-                .map_err(|e| SendError::temporary(format!("cannot connect to {target}: {e}")))?;
-        let _ = stream.set_nodelay(true);
-        Ok(stream)
+    async fn connect(&self) -> Result<Stream, SendError> {
+        self.dialer.connect().await.map_err(SendError::temporary)
     }
 
     fn check_response(&self, response: Vec<u8>) -> Result<Option<Vec<u8>>, SendError> {
@@ -572,7 +583,7 @@ impl TcpDestination {
 
     async fn exchange(
         &self,
-        slot: &mut Option<(TcpStream, Framer)>,
+        slot: &mut Option<(Stream, Framer)>,
         frame: &[u8],
     ) -> Result<Option<Vec<u8>>, SendError> {
         if slot.is_none() {

@@ -16,6 +16,7 @@ Byte sequences in settings are written as text with the escapes `\r`, `\n`, `\t`
 | `max_connections` | `100` | Concurrent connections; more are closed |
 | `max_frame_len` | 16 MiB | Largest accepted message |
 | `require_trailing_cr` | `false` | Reject frames whose end block is not followed by CR |
+| `tls` | none | TLS listener settings; see [TLS](#tls) |
 
 In original mode the sender gets `AA` once the message is stored, or `AE` when it could not be stored. In enhanced mode (MSH-15/16 valued) it gets `CA`/`CE` when MSH-15 asks for a commit acknowledgment (`NE` means none). Payloads that are not valid HL7 are stored for inspection and answered with `AR`. The acknowledgment's MSH-10 is the OXIM message identifier.
 
@@ -28,6 +29,7 @@ In original mode the sender gets `AA` once the message is stored, or `AE` when i
 | `ack_timeout` | `30s` | Time to wait for the acknowledgment |
 | `ack` | `required` | `required`, or `none` for receivers that never acknowledge |
 | `max_frame_len` | 16 MiB | Largest accepted acknowledgment |
+| `tls` | none | TLS sender settings (`tls: {}` for the defaults); see [TLS](#tls) |
 
 The connection is reused and re-established after errors. `AA`/`CA` (or an MLLP release 2 commit ACK) delivers the message and the acknowledgment is stored as the response. `AE`/`CE`, timeouts and connection errors are retried; `AR`/`CR` fails the delivery. An acknowledgment whose MSA-2 does not match the sent MSH-10 is treated as a transport error.
 
@@ -49,6 +51,7 @@ The connection is reused and re-established after errors. `AA`/`CA` (or an MLLP 
 | `error_response` | none | Bytes sent when a message could not be stored, for example `hex:15` |
 | `max_connections` | `100` | Concurrent connections |
 | `max_message_len` | 16 MiB | Largest accepted message |
+| `tls` | none | TLS listener settings; see [TLS](#tls) |
 
 ### Destination
 
@@ -61,6 +64,7 @@ The connection is reused and re-established after errors. `AA`/`CA` (or an MLLP 
 | `wait_for_response` | `false` | Read one framed response after each message |
 | `expected_response` | none | A response that differs fails the attempt (retried) |
 | `max_message_len` | 16 MiB | Largest accepted response |
+| `tls` | none | TLS sender settings (`tls: {}` for the defaults); see [TLS](#tls) |
 
 With framing `none`, each message uses its own connection and the response is everything the receiver sends before closing.
 
@@ -177,6 +181,43 @@ CLSI POCT1-A point-of-care devices over TCP. OXIM listens and plays the observat
 ## Licensing note
 
 Serial port support uses the `tokio-serial` (MIT) and `serialport` (MPL-2.0) crates. MPL-2.0 is a file-level copyleft; `serialport` is used unmodified, so OXIM itself remains MIT OR Apache-2.0.
+
+## TLS
+
+`mllp` and `tcp` sources and destinations accept a `tls` block (rustls with the ring provider; TLS 1.2 and 1.3; certificates are always verified).
+
+Listener:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `cert_file` | required | PEM certificate chain, server certificate first |
+| `key_file` | required | PEM private key (PKCS #8, PKCS #1 or SEC1) |
+| `client_ca_file` | none | PEM certificate authorities for client certificates; enables mutual TLS |
+| `require_client_cert` | `true` | With `client_ca_file`: reject clients without a certificate |
+| `handshake_timeout` | `10s` | Limit for the TLS handshake |
+
+Sender:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `ca_file` | none | PEM certificate authorities trusted in addition to the system's |
+| `system_roots` | `true` | Whether to trust the operating system's certificate authorities |
+| `cert_file`, `key_file` | none | Client certificate and key for mutual TLS |
+| `server_name` | host of `target` | Name the server certificate must match |
+
+```yaml
+source:
+  type: mllp
+  data_type: hl7v2
+  settings:
+    listen: 0.0.0.0:2575
+    tls:
+      cert_file: /etc/oxim/tls/oxim.pem
+      key_file: /etc/oxim/tls/oxim-key.pem
+      client_ca_file: /etc/oxim/tls/lab-ca.pem   # mutual TLS
+```
+
+Certificate files are read when the channel is deployed, so a bad path or key fails the deployment. Use absolute paths: relative paths depend on the working directory of the process.
 
 ## License
 
