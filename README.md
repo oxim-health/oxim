@@ -21,6 +21,7 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 |---|---|
 | [`crates/oxim-hl7`](crates/oxim-hl7) | Lossless HL7 v2 parsing, editing, serialization and acknowledgments |
 | [`crates/oxim-mllp`](crates/oxim-mllp) | Sans-IO MLLP framing |
+| [`crates/oxim-poct1a`](crates/oxim-poct1a) | POCT1-A stream splitting, lossless messages, builders and the host conversation |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |
 | [`fuzz`](fuzz) | Fuzz targets (cargo-fuzz) |
