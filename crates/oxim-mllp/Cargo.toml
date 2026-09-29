@@ -1,0 +1,24 @@
+[package]
+name = "oxim-mllp"
+description = "Sans-IO MLLP (Minimal Lower Layer Protocol) framing for HL7 v2"
+keywords = ["hl7", "mllp", "healthcare", "interoperability", "framing"]
+categories = ["network-programming", "parser-implementations"]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+memchr.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,18 @@
+/target/
+/fuzz/target/
+/fuzz/artifacts/
+/fuzz/corpus/
+/fuzz/coverage/
+
+# Local OXIM runtime data
+*.db
+*.db-shm
+*.db-wal
+/data/
+
+# Editors and OS files
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

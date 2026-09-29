@@ -1,0 +1,39 @@
+[package]
+name = "oxim-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
+oxim-hl7 = { path = "../crates/oxim-hl7" }
+oxim-mllp = { path = "../crates/oxim-mllp" }
+
+# Not part of the main workspace: fuzzing needs a nightly toolchain.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "hl7_message"
+path = "fuzz_targets/hl7_message.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hl7_edit"
+path = "fuzz_targets/hl7_edit.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mllp_decoder"
+path = "fuzz_targets/mllp_decoder.rs"
+test = false
+doc = false
+bench = false

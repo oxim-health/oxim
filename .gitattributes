@@ -1,0 +1,7 @@
+* text=auto eol=lf
+
+# Protocol fixtures are byte-exact test inputs: never normalize line endings.
+**/fixtures/** -text
+*.hl7 -text
+*.astm -text
+*.bin -text

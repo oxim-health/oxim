@@ -1,0 +1,38 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+authors = ["The OXIM Contributors"]
+repository = "https://github.com/oxim-health/oxim"
+homepage = "https://github.com/oxim-health/oxim"
+# Nothing is published before the complete 1.0 release (see docs/adr/0014).
+publish = false
+
+[workspace.dependencies]
+encoding_rs = "0.8"
+memchr = "2.7"
+thiserror = "2"
+
+proptest = "1.5"
+
+[workspace.lints.rust]
+missing_docs = "warn"
+unreachable_pub = "warn"
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+unwrap_used = "warn"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
