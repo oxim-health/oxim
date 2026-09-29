@@ -45,6 +45,15 @@ server:
   # ui_dir: ui
   session_idle: 30m        # log out after this long without activity
   session_max: 12h         # log out this long after login
+
+# Alerts: rules evaluated while OXIM runs, with notification targets.
+# alerts:
+#   targets:
+#     - {id: ops, type: webhook, url: https://ops.example.org/oxim-alerts}
+#   rules:
+#     - {id: lis-backlog, kind: queue_depth, destination: lis, above: 100, for: 5m}
+#     - {id: analyzers, kind: device_silence, severity: critical}
+#     - {id: disk, kind: disk_space, below: 10%}
 ";
 
 const EXAMPLE_CHANNEL: &str = "\

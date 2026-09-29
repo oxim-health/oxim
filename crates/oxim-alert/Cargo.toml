@@ -1,0 +1,36 @@
+[package]
+name = "oxim-alert"
+description = "Alert engine for OXIM: queue, error, device silence, disk and certificate rules with email, webhook, chat, syslog and SNMP notifications"
+keywords = ["healthcare", "monitoring", "alerts", "snmp", "syslog"]
+categories = ["network-programming"]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+fs4.workspace = true
+oxim-core.workspace = true
+oxim-devices.workspace = true
+oxim-model.workspace = true
+oxim-store.workspace = true
+rustls-pki-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+oxim-connectors.workspace = true
+rcgen.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

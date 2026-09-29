@@ -38,6 +38,7 @@ dicom-object = "0.10"
 dicom-transfer-syntax-registry = { version = "0.10", default-features = false }
 dicom-ul = { version = "0.10", features = ["async"] }
 encoding_rs = "0.8"
+fs4 = "1.1"
 fastrand = "2"
 http = "1"
 http-body-util = "0.1"
@@ -75,6 +76,7 @@ oxim-fhir = { path = "crates/oxim-fhir" }
 oxim-dicom = { path = "crates/oxim-dicom" }
 oxim-formats = { path = "crates/oxim-formats" }
 oxim-hl7 = { path = "crates/oxim-hl7" }
+oxim-alert = { path = "crates/oxim-alert" }
 oxim-lab = { path = "crates/oxim-lab" }
 oxim-mapping = { path = "crates/oxim-mapping" }
 oxim-mirth = { path = "crates/oxim-mirth" }

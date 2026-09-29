@@ -7,10 +7,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use oxim_alert::{AlertEngine, Sources};
 use oxim_core::{ChannelConfig, Engine, EngineError, EngineOptions, SystemClock};
 use oxim_lab::OrderCache;
 use oxim_model::{ChannelId, Timestamp};
 use oxim_store::{PrunePolicy, SqliteStore};
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
 use crate::CliResult;
@@ -28,13 +30,22 @@ pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) 
     options.processing_queue = settings.engine.processing_queue;
     options.shutdown_grace = settings.engine.shutdown_grace.0;
     options.idle_poll = settings.engine.idle_poll.0;
+    let components = components::build(&settings);
+    let devices = components.devices.clone();
     let engine = Engine::start(
         Box::new(store),
-        components::registry(&settings),
+        components.registry,
         Arc::new(SystemClock),
         options,
     )
     .await?;
+    let alerts = match AlertEngine::new(settings.alerts.clone(), engine.registry()) {
+        Ok(alerts) => Arc::new(alerts),
+        Err(e) => {
+            engine.shutdown().await;
+            return Err(e.into());
+        }
+    };
     info!(
         version = env!("CARGO_PKG_VERSION"),
         database = %database.display(),
@@ -63,6 +74,23 @@ pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) 
         })
     });
     let retention = tokio::spawn(retention_loop(engine.clone(), settings.clone()));
+    let alerting = CancellationToken::new();
+    let alert_task = tokio::spawn(
+        alerts.run(
+            Sources {
+                engine: engine.clone(),
+                devices: Some(devices),
+                data_dir: settings.data_dir.clone(),
+                certificates: settings
+                    .server
+                    .tls
+                    .as_ref()
+                    .map(|tls| vec![tls.cert.clone()])
+                    .unwrap_or_default(),
+            },
+            alerting.clone(),
+        ),
+    );
 
     shutdown.await;
     info!("stopping");
@@ -71,6 +99,8 @@ pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) 
         reload.abort();
     }
     retention.abort();
+    alerting.cancel();
+    let _ = alert_task.await;
     engine.shutdown().await;
     info!("OXIM stopped");
     Ok(())

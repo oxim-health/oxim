@@ -22,6 +22,7 @@ clap.workspace = true
 oxim-auth.workspace = true
 oxim-cda.workspace = true
 oxim-connectors.workspace = true
+oxim-alert.workspace = true
 oxim-core.workspace = true
 oxim-dicom.workspace = true
 oxim-devices.workspace = true

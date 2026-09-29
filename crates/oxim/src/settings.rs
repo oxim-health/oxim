@@ -41,6 +41,9 @@ pub(crate) struct Settings {
     /// The web server: REST API, metrics and web UI.
     #[serde(default)]
     pub(crate) server: ServerSettings,
+    /// Alert rules and notification targets.
+    #[serde(default)]
+    pub(crate) alerts: oxim_alert::AlertSettings,
 }
 
 fn data_dir_default() -> PathBuf {
@@ -290,6 +293,7 @@ impl Default for Settings {
             retention: RetentionSettings::default(),
             reload: ReloadSettings::default(),
             server: ServerSettings::default(),
+            alerts: oxim_alert::AlertSettings::default(),
         }
     }
 }
@@ -333,6 +337,26 @@ impl Settings {
         }
         if let Some(directory) = &mut self.server.ui_dir {
             resolve(directory);
+        }
+        for rule in &mut self.alerts.rules {
+            match &mut rule.condition {
+                oxim_alert::Condition::DiskSpace {
+                    path: Some(path), ..
+                } => resolve(path),
+                oxim_alert::Condition::CertificateExpiry { files, .. } => {
+                    files.iter_mut().for_each(resolve);
+                }
+                _ => {}
+            }
+        }
+        for target in &mut self.alerts.targets {
+            if let oxim_alert::TargetKind::Webhook {
+                ca_file: Some(path),
+                ..
+            } = &mut target.kind
+            {
+                resolve(path);
+            }
         }
         self
     }
@@ -408,6 +432,53 @@ mod tests {
         assert!(tls.cert.is_absolute());
         assert!(tls.key.ends_with("tls/key.pem") || tls.key.ends_with("tls\\key.pem"));
         assert_eq!(settings.server.session_idle.0, Duration::from_secs(900));
+    }
+
+    #[test]
+    fn reads_alert_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("oxim.yaml");
+        std::fs::write(
+            &path,
+            "alerts:
+  interval: 30s
+  targets:
+    - {id: noc, type: syslog, address: '10.0.0.5:514', protocol: tcp, min_severity: critical}
+    - {id: ops, type: teams, url: 'https://example.org/hook'}
+  rules:
+    - {id: lis, kind: queue_depth, destination: lis, above: 100, for: 5m, targets: [ops]}
+    - {id: disk, kind: disk_space, below: 10%}
+    - {id: space, kind: disk_space, path: spool, below: 5GiB}
+    - {id: certs, kind: certificate_expiry, files: [tls/lab.pem], within: 30d}
+",
+        )
+        .unwrap();
+        let settings = Settings::load(&path).unwrap();
+        let alerts = &settings.alerts;
+        alerts.validate().unwrap();
+        assert_eq!(alerts.interval.0, Duration::from_secs(30));
+        assert_eq!(alerts.rules.len(), 4);
+        assert_eq!(alerts.rules[0].hold.unwrap().0, Duration::from_secs(300));
+        assert_eq!(
+            alerts.targets[0].min_severity,
+            Some(oxim_alert::Severity::Critical)
+        );
+        match &alerts.rules[2].condition {
+            oxim_alert::Condition::DiskSpace {
+                path: Some(path),
+                below,
+            } => {
+                assert!(path.is_absolute());
+                assert_eq!(*below, oxim_alert::Space::Bytes(5 << 30));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        std::fs::write(
+            &path,
+            "alerts:\n  rules:\n    - {id: x, kind: queue_depth, above: 1, typo: 2}\n",
+        )
+        .unwrap();
+        assert!(Settings::load(&path).is_err());
     }
 
     #[test]
