@@ -1,0 +1,25 @@
+[package]
+name = "oxim-astm"
+description = "ASTM E1381/E1394 (CLSI LIS01-A2/LIS02-A2) framing, link sessions and lossless messages"
+keywords = ["astm", "lis", "laboratory", "healthcare", "interoperability"]
+categories = ["parser-implementations", "network-programming"]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+encoding_rs.workspace = true
+memchr.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true
