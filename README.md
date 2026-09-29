@@ -37,6 +37,7 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-lab`](crates/oxim-lab) | Laboratory workflows: order cache, host query answers, test routing and worklist download |
 | [`crates/oxim-script`](crates/oxim-script) | JavaScript filters, transformers and encoders in an embedded QuickJS sandbox, with Mirth Connect compatibility |
 | [`crates/oxim-connectors`](crates/oxim-connectors) | Source and destination connectors: MLLP, raw TCP, files, HTTP, ASTM over TCP and serial, POCT1-A |
+| [`crates/oxim-connectors-remote`](crates/oxim-connectors-remote) | Remote file, object storage, email and web service connectors: SFTP, FTP/FTPS, S3, SMTP, IMAP, SOAP |
 | [`crates/oxim-dicom`](crates/oxim-dicom) | DICOM routing: Storage SCP/SCU, DICOMweb STOW-RS, attribute filters and editing, PS3.15 de-identification |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |

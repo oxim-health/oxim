@@ -44,6 +44,10 @@ exceptions = [
     { allow = ["CC0-1.0"], crate = "encoding-index-singlebyte" },
     { allow = ["CC0-1.0"], crate = "encoding-index-tradchinese" },
     { allow = ["CC0-1.0"], crate = "encoding_index_tests" },
+    # Quoted-printable encoding used by lettre (the SMTP destination of
+    # oxim-connectors-remote). 0BSD is a public-domain-equivalent license
+    # without even an attribution requirement.
+    { allow = ["0BSD"], crate = "quoted_printable" },
 ]
 
 [bans]
