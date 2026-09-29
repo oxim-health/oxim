@@ -94,6 +94,11 @@ pub trait MessageStore: Send {
     /// their queues, and messages still waiting for processing are listed.
     fn recover(&mut self, now: Timestamp) -> StoreResult<RecoveryReport>;
 
+    /// Returns the in-flight deliveries of one channel to their queues, for
+    /// example when the channel is redeployed after its workers stopped.
+    /// Returns how many deliveries were released.
+    fn release_in_flight(&mut self, channel: &ChannelId, now: Timestamp) -> StoreResult<u64>;
+
     /// A message record with its destination states.
     fn message(&self, id: MessageId) -> StoreResult<Option<MessageRecord>>;
 

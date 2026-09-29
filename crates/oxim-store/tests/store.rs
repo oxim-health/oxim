@@ -291,6 +291,23 @@ fn recovers_after_a_crash() {
 }
 
 #[test]
+fn releases_in_flight_deliveries_of_one_channel() {
+    let (mut store, ids) = store_with(1, &["lis"]);
+    store
+        .next_delivery(&channel(), &dest("lis"), QueueOrdering::Strict, at(100))
+        .unwrap()
+        .unwrap();
+    let other = ChannelId::new("other").unwrap();
+    assert_eq!(store.release_in_flight(&other, at(101)).unwrap(), 0);
+    assert_eq!(store.release_in_flight(&channel(), at(101)).unwrap(), 1);
+    let again = store
+        .next_delivery(&channel(), &dest("lis"), QueueOrdering::Strict, at(102))
+        .unwrap()
+        .unwrap();
+    assert_eq!(again.message_id, ids[0]);
+}
+
+#[test]
 fn guards_invalid_transitions() {
     let (mut store, ids) = store_with(1, &["lis"]);
     let lis = dest("lis");

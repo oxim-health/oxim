@@ -554,6 +554,15 @@ impl MessageStore for SqliteStore {
         })
     }
 
+    fn release_in_flight(&mut self, channel: &ChannelId, now: Timestamp) -> StoreResult<u64> {
+        let released = self.conn.execute(
+            "UPDATE deliveries SET status = 'queued', updated_at = ?1
+             WHERE channel = ?2 AND status = 'sending'",
+            params![now.unix_nanos(), channel.as_str()],
+        )?;
+        Ok(released as u64)
+    }
+
     fn message(&self, id: MessageId) -> StoreResult<Option<MessageRecord>> {
         let key = id_bytes(id);
         let row = self
