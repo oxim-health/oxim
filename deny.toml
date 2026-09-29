@@ -6,7 +6,12 @@ all-features = true
 [advisories]
 # Every advisory fails the check. Record justified exceptions here with the
 # advisory ID and a comment explaining why it does not affect OXIM.
-ignore = []
+ignore = [
+    # `encoding` is unmaintained; there is no vulnerability. dicom-rs 0.10
+    # (used by oxim-dicom) decodes DICOM Specific Character Sets with its
+    # static tables and offers no alternative backend.
+    "RUSTSEC-2021-0153",
+]
 
 [licenses]
 # Permissive licenses compatible with distributing OXIM under MIT OR
@@ -31,6 +36,14 @@ exceptions = [
     # file-level copyleft; the crate is used unmodified, so OXIM itself stays
     # MIT OR Apache-2.0. Accepted for this crate only.
     { allow = ["MPL-2.0"], crate = "serialport" },
+    # Character set tables of the `encoding` crate, used by dicom-rs for DICOM
+    # Specific Character Sets. CC0-1.0 dedicates them to the public domain.
+    { allow = ["CC0-1.0"], crate = "encoding-index-japanese" },
+    { allow = ["CC0-1.0"], crate = "encoding-index-korean" },
+    { allow = ["CC0-1.0"], crate = "encoding-index-simpchinese" },
+    { allow = ["CC0-1.0"], crate = "encoding-index-singlebyte" },
+    { allow = ["CC0-1.0"], crate = "encoding-index-tradchinese" },
+    { allow = ["CC0-1.0"], crate = "encoding_index_tests" },
 ]
 
 [bans]

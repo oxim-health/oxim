@@ -20,6 +20,13 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 windows-service = "0.8"
 bytes = "1"
+dicom-core = "0.10"
+dicom-dictionary-std = { version = "0.10", features = ["sop-class"] }
+dicom-object = "0.10"
+# Without the default features: no image codecs (the router forwards pixel
+# data as encoded) and no rayon thread pool.
+dicom-transfer-syntax-registry = { version = "0.10", default-features = false }
+dicom-ul = { version = "0.10", features = ["async"] }
 encoding_rs = "0.8"
 fastrand = "2"
 http = "1"
@@ -30,6 +37,7 @@ hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
 memchr = "2.7"
 quick-xml = "0.42"
 regex = "1.11"
+ring = "0.17"
 rusqlite = { version = "0.40", features = ["bundled"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-native-certs = "0.8"
@@ -46,6 +54,7 @@ tracing = "0.1"
 oxim-astm = { path = "crates/oxim-astm" }
 oxim-connectors = { path = "crates/oxim-connectors" }
 oxim-core = { path = "crates/oxim-core" }
+oxim-dicom = { path = "crates/oxim-dicom" }
 oxim-formats = { path = "crates/oxim-formats" }
 oxim-hl7 = { path = "crates/oxim-hl7" }
 oxim-mapping = { path = "crates/oxim-mapping" }
