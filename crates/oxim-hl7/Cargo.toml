@@ -1,0 +1,25 @@
+[package]
+name = "oxim-hl7"
+description = "Lossless HL7 v2 message parsing, editing and serialization"
+keywords = ["hl7", "healthcare", "interoperability", "parser", "medical"]
+categories = ["parser-implementations", "encoding"]
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+
+[dependencies]
+encoding_rs.workspace = true
+memchr.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true
