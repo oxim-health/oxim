@@ -35,6 +35,7 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-mapping`](crates/oxim-mapping) | Mappings between HL7 v2, ASTM, POCT1-A and the normalized clinical model (normalizers and encoders) |
 | [`crates/oxim-fhir`](crates/oxim-fhir) | HL7 FHIR R4 JSON resources, mapping to and from the normalized model, transaction response summaries |
 | [`crates/oxim-lab`](crates/oxim-lab) | Laboratory workflows: order cache, host query answers, test routing and worklist download |
+| [`crates/oxim-script`](crates/oxim-script) | JavaScript filters, transformers and encoders in an embedded QuickJS sandbox, with Mirth Connect compatibility |
 | [`crates/oxim-connectors`](crates/oxim-connectors) | Source and destination connectors: MLLP, raw TCP, files, HTTP, ASTM over TCP and serial, POCT1-A |
 | [`crates/oxim-dicom`](crates/oxim-dicom) | DICOM routing: Storage SCP/SCU, DICOMweb STOW-RS, attribute filters and editing, PS3.15 de-identification |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |

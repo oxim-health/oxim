@@ -48,6 +48,7 @@ memchr = "2.7"
 quick-xml = "0.42"
 regex = "1.11"
 ring = "0.17"
+rquickjs = { version = "0.14", default-features = false, features = ["std", "parallel"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-native-certs = "0.8"
@@ -75,6 +76,7 @@ oxim-mapping = { path = "crates/oxim-mapping" }
 oxim-mllp = { path = "crates/oxim-mllp" }
 oxim-model = { path = "crates/oxim-model" }
 oxim-poct1a = { path = "crates/oxim-poct1a" }
+oxim-script = { path = "crates/oxim-script" }
 oxim-store = { path = "crates/oxim-store" }
 oxim-transform = { path = "crates/oxim-transform" }
 

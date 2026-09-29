@@ -25,6 +25,7 @@ oxim-core.workspace = true
 oxim-dicom.workspace = true
 oxim-fhir.workspace = true
 oxim-lab.workspace = true
+oxim-script.workspace = true
 oxim-mapping.workspace = true
 oxim-model.workspace = true
 oxim-server.workspace = true
