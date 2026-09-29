@@ -201,6 +201,31 @@ async fn receive(context: &SourceContext, payload: Vec<u8>, peer: SocketAddr) ->
     match Message::parse(&payload) {
         Ok(message) => {
             let mode = requested_mode(&message);
+            // A channel that answers requests (for example a query relayed
+            // to the LIS) sends its reply instead of a plain acknowledgment.
+            if context.responds() {
+                match context.request(payload, info).await {
+                    Ok(reply) => {
+                        if let Some(data) = reply.data {
+                            return Some(data);
+                        }
+                        if let Some(reason) = &reply.error {
+                            debug!(channel = %context.channel(), %peer, %reason, "no reply; acknowledging instead");
+                        }
+                        return acknowledgment(
+                            &message,
+                            mode,
+                            &Ok(reply.message_id),
+                            context.now(),
+                        );
+                    }
+                    Err(error) => {
+                        let error = error.to_string();
+                        warn!(channel = %context.channel(), %peer, %error, "message could not be stored");
+                        return acknowledgment(&message, mode, &Err(error), context.now());
+                    }
+                }
+            }
             let outcome = context
                 .submit(payload, info)
                 .await
