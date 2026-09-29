@@ -73,6 +73,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
+      # The web UI is embedded in the binary, so it is built first.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Build the web UI
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
 
       - name: Install zig
         if: matrix.zig

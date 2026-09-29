@@ -10,3 +10,7 @@ docs
 **/*.db-shm
 **/*.db-wal
 /data
+ui/node_modules
+ui/dist
+ui/test-results
+ui/playwright-report

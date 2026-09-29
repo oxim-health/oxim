@@ -9,11 +9,21 @@
 # simulator used by the demo in deploy/docker/compose.yaml.
 
 ARG RUST_VERSION=1.89
+ARG NODE_VERSION=24
 ARG DEBIAN_RELEASE=bookworm
+
+# The web UI, embedded in the binary by the builder stage.
+FROM node:${NODE_VERSION}-${DEBIAN_RELEASE}-slim AS ui
+WORKDIR /src/ui
+COPY ui/package.json ui/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
+COPY ui/ ./
+RUN npm run build
 
 FROM rust:${RUST_VERSION}-${DEBIAN_RELEASE} AS builder
 WORKDIR /src
 COPY . .
+COPY --from=ui /src/ui/dist /src/ui/dist
 # Build outputs live in cache mounts, so the binaries are copied to /out in
 # the same step.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

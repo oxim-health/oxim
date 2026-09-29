@@ -67,6 +67,7 @@ The installer is defined in [`deploy/windows/oxim.wxs`](../../deploy/windows/oxi
 
 ```powershell
 dotnet tool install --global wix --version 5.0.2
+cd ui; npm ci; npm run build; cd ..   # the web UI embedded in the binary
 cargo build --release --locked -p oxim
 .\deploy\windows\build-msi.ps1 -Version 1.0.0
 ```
