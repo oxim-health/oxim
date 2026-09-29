@@ -11,6 +11,7 @@ mod profile;
 mod run;
 mod service;
 mod settings;
+mod shadow;
 mod web;
 
 use std::path::PathBuf;
@@ -95,6 +96,9 @@ enum Command {
         #[command(subcommand)]
         command: ImportCommand,
     },
+    /// Replay captured Mirth Connect traffic through a channel and compare
+    /// OXIM's output with Mirth's.
+    Shadow(shadow::ShadowArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -321,6 +325,15 @@ fn main() -> ExitCode {
             })
         }
         Command::Profile { command } => profile::run(command, &mut out),
+        Command::Shadow(args) => settings::Settings::load(&cli.config)
+            .and_then(|settings| shadow::run(&settings, args, &mut out))
+            .and_then(|identical| {
+                if identical {
+                    Ok(())
+                } else {
+                    Err("OXIM's output differs from Mirth's; see the report".into())
+                }
+            }),
         Command::Service { command } => match command {
             ServiceCommand::Install => service::install(&cli.config, &mut out),
             ServiceCommand::Uninstall => service::uninstall(&mut out),

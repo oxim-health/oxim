@@ -121,8 +121,12 @@ pub(crate) fn run(settings: &Settings, args: ShadowArgs, out: &mut impl Write) -
     let traffic = if pcap {
         Traffic::from_pcap(&capture, &options)?
     } else {
-        let inbound = oxim_capture::Capture::from_slice(&capture)
-            .map_err(|e| format!("{} is neither PCAP nor .oximcap: {e}", args.capture.display()))?;
+        let inbound = oxim_capture::Capture::from_slice(&capture).map_err(|e| {
+            format!(
+                "{} is neither PCAP nor .oximcap: {e}",
+                args.capture.display()
+            )
+        })?;
         Traffic::from_captures(&inbound, &captures, &options)
     };
 

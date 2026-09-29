@@ -41,6 +41,9 @@ pub(crate) struct Settings {
     /// The web server: REST API, metrics and web UI.
     #[serde(default)]
     pub(crate) server: ServerSettings,
+    /// Where messages are stored.
+    #[serde(default)]
+    pub(crate) store: StoreSettings,
     /// Alert rules and notification targets.
     #[serde(default)]
     pub(crate) alerts: oxim_alert::AlertSettings,
@@ -83,6 +86,40 @@ impl Default for BackupSettings {
             utc_offset: 0,
         }
     }
+}
+
+/// The message store backend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum StoreKind {
+    /// `oxim.db` in the data directory (single node).
+    #[default]
+    Sqlite,
+    /// A PostgreSQL database shared by the nodes of a cluster.
+    Postgres,
+}
+
+/// The `store` section of `oxim.yaml`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StoreSettings {
+    /// `sqlite` (default) or `postgres`.
+    #[serde(default, rename = "type")]
+    pub(crate) kind: StoreKind,
+    /// PostgreSQL: the environment variable holding the connection URL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) url_env: Option<String>,
+    /// PostgreSQL: TLS settings, like a connector's `tls` block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) tls: Option<serde_json::Value>,
+    /// PostgreSQL: this node's name in the cluster (the host name by
+    /// default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) node_id: Option<String>,
+    /// SQLite: the environment variable holding the master key that
+    /// encrypts message contents (64 hexadecimal digits or base64).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) encryption_key_env: Option<String>,
 }
 
 fn data_dir_default() -> PathBuf {
@@ -333,6 +370,7 @@ impl Default for Settings {
             reload: ReloadSettings::default(),
             server: ServerSettings::default(),
             alerts: oxim_alert::AlertSettings::default(),
+            store: StoreSettings::default(),
             backups: BackupSettings::default(),
             config_file: None,
         }
