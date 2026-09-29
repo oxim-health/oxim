@@ -14,7 +14,10 @@ fuzz_target!(|data: &[u8]| {
         0 => DelimitedOptions::csv(),
         1 => DelimitedOptions::tsv(),
         2 => DelimitedOptions::csv().with_escape(Some(b'\\')),
-        _ => DelimitedOptions::csv().with_delimiter(b'|').with_quote(None).with_header(true),
+        _ => DelimitedOptions::csv()
+            .with_delimiter(b'|')
+            .with_quote(None)
+            .with_header(true),
     };
     let doc = match DelimitedDocument::parse(input, &options) {
         Ok(doc) => doc,

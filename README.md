@@ -24,6 +24,7 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-astm`](crates/oxim-astm) | ASTM E1381/E1394 (CLSI LIS01/LIS02): frames, link sessions, unframed streams and lossless messages |
 | [`crates/oxim-formats`](crates/oxim-formats) | Lossless JSON, XML, delimited and fixed-width documents |
 | [`crates/oxim-model`](crates/oxim-model) | Message envelope, identifiers and the normalized, FHIR-aligned clinical model |
+| [`crates/oxim-poct1a`](crates/oxim-poct1a) | POCT1-A stream splitting, lossless messages, builders and the host conversation |
 | [`crates/oxim-store`](crates/oxim-store) | Durable message store and per-destination delivery queues (SQLite) |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |

@@ -9,7 +9,11 @@ fuzz_target!(|data: &[u8]| {
     let Ok(mut doc) = JsonDocument::parse(data, &JsonOptions::default()) else {
         return;
     };
-    assert_eq!(doc.to_bytes(), data, "unmodified documents must be reproduced");
+    assert_eq!(
+        doc.to_bytes(),
+        data,
+        "unmodified documents must be reproduced"
+    );
     let _ = doc.get_text("");
     let _ = doc.get_text("results[0].value");
     if doc.set_text("/oxim/fuzz/-", "value").is_ok() {

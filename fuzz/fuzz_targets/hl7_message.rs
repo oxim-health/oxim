@@ -3,7 +3,7 @@
 //! Parses arbitrary bytes as an HL7 v2 message and walks every value.
 
 use libfuzzer_sys::fuzz_target;
-use oxim_hl7::{Message, build_ack, requested_mode, AckCode, AckOptions};
+use oxim_hl7::{AckCode, AckOptions, Message, build_ack, requested_mode};
 
 fuzz_target!(|data: &[u8]| {
     let Ok(message) = Message::parse(data) else {
@@ -18,7 +18,9 @@ fuzz_target!(|data: &[u8]| {
         .unwrap_or(oxim_hl7::Encoding::for_label(b"utf-8").unwrap());
     for segment in message.segments() {
         for n in 1..=segment.field_count() + 1 {
-            let Some(field) = segment.field(n) else { continue };
+            let Some(field) = segment.field(n) else {
+                continue;
+            };
             for repetition in field.repetitions() {
                 for component in repetition.components() {
                     for subcomponent in component.subcomponents() {
@@ -43,6 +45,9 @@ fuzz_target!(|data: &[u8]| {
         },
     );
     if let Ok(ack) = ack {
-        assert!(Message::parse(&ack.to_bytes()).is_ok(), "acknowledgments must parse");
+        assert!(
+            Message::parse(&ack.to_bytes()).is_ok(),
+            "acknowledgments must parse"
+        );
     }
 });

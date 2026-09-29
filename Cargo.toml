@@ -16,6 +16,7 @@ publish = false
 [workspace.dependencies]
 encoding_rs = "0.8"
 memchr = "2.7"
+quick-xml = "0.42"
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

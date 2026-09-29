@@ -24,7 +24,11 @@ fuzz_target!(|input: (Vec<u8>, Vec<u16>, bool, bool)| {
     }
 
     let mut config = SessionConfig::default();
-    config.role = if instrument { Role::Instrument } else { Role::Host };
+    config.role = if instrument {
+        Role::Instrument
+    } else {
+        Role::Host
+    };
     config.max_message_len = 4096;
     let mut session = Session::new(config);
     let t0 = Instant::now();

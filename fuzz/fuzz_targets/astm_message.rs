@@ -13,7 +13,9 @@ fuzz_target!(|data: &[u8]| {
         assert_eq!(message.to_bytes(), data, "parsing must be lossless");
         for record in message.records() {
             for n in 1..=record.field_count() + 1 {
-                let Some(field) = record.field(n) else { continue };
+                let Some(field) = record.field(n) else {
+                    continue;
+                };
                 for repetition in field.repetitions() {
                     for component in repetition.components() {
                         let _ = component.to_string_lossy();
