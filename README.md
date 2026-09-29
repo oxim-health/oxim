@@ -27,7 +27,9 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-poct1a`](crates/oxim-poct1a) | POCT1-A stream splitting, lossless messages, builders and the host conversation |
 | [`crates/oxim-store`](crates/oxim-store) | Durable message store and per-destination delivery queues (SQLite) |
 | [`crates/oxim-core`](crates/oxim-core) | Channel runtime: sources, pipeline, durable queues, destination workers and configuration |
-| [`crates/oxim`](crates/oxim) | The `oxim` program: engine, live channel reload, retention, message tools and OS service |
+| [`crates/oxim-auth`](crates/oxim-auth) | Users, roles, Argon2id passwords, sessions, API tokens and login throttling |
+| [`crates/oxim-server`](crates/oxim-server) | REST API with PHI masking, audit, OpenAPI, Prometheus metrics, live events and HTTPS |
+| [`crates/oxim`](crates/oxim) | The `oxim` program: engine, web server, live channel reload, retention, message, user and token tools and OS service |
 | [`crates/oxim-sim`](crates/oxim-sim) | Simulated analyzers (ASTM), LIS systems (MLLP) and POCT devices, with synthetic data and load tests |
 | [`crates/oxim-transform`](crates/oxim-transform) | Declarative filters, mapping operations and code tables |
 | [`crates/oxim-mapping`](crates/oxim-mapping) | Mappings between HL7 v2, ASTM, POCT1-A and the normalized clinical model (normalizers and encoders) |

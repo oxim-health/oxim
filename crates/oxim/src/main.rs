@@ -1,5 +1,6 @@
 //! `oxim`: the OXIM clinical integration engine.
 
+mod access;
 mod commands;
 mod components;
 mod init;
@@ -7,6 +8,7 @@ mod logging;
 mod run;
 mod service;
 mod settings;
+mod web;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -53,6 +55,98 @@ enum Command {
         #[command(subcommand)]
         command: ServiceCommand,
     },
+    /// Manage web server users.
+    Users {
+        #[command(subcommand)]
+        command: UsersCommand,
+    },
+    /// Manage API tokens for scripts and monitoring.
+    Tokens {
+        #[command(subcommand)]
+        command: TokensCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum UsersCommand {
+    /// Create an administrator (the first user; the web server starts once
+    /// a user exists).
+    CreateAdmin {
+        /// The user name.
+        #[arg(long, default_value = "admin")]
+        username: String,
+        /// The name shown in the web UI.
+        #[arg(long)]
+        display_name: Option<String>,
+        /// Read the password from the first line of standard input instead
+        /// of prompting.
+        #[arg(long)]
+        password_stdin: bool,
+    },
+    /// Create a user.
+    Add {
+        /// The user name.
+        username: String,
+        /// admin, operator or viewer.
+        #[arg(long)]
+        role: String,
+        /// The name shown in the web UI.
+        #[arg(long)]
+        display_name: Option<String>,
+        /// Read the password from the first line of standard input.
+        #[arg(long)]
+        password_stdin: bool,
+    },
+    /// List users.
+    List,
+    /// Disable a user and end their sessions.
+    Disable {
+        /// The user name.
+        username: String,
+    },
+    /// Enable a disabled user.
+    Enable {
+        /// The user name.
+        username: String,
+    },
+    /// Set a user's password and end their sessions.
+    Passwd {
+        /// The user name.
+        username: String,
+        /// Read the password from the first line of standard input.
+        #[arg(long)]
+        password_stdin: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum TokensCommand {
+    /// Create an API token; it is printed once.
+    Create {
+        /// A name describing the token's use, e.g. prometheus.
+        name: String,
+        /// admin, operator or viewer.
+        #[arg(long, default_value = "viewer")]
+        role: String,
+        /// Let the token expire after this long, e.g. 90d.
+        #[arg(long)]
+        expires_in: Option<oxim_core::config::DurationText>,
+    },
+    /// List API tokens.
+    List,
+    /// Revoke an API token.
+    Revoke {
+        /// The token's number from `oxim tokens list`.
+        id: i64,
+    },
+}
+
+fn password_source(stdin: bool) -> access::PasswordSource {
+    if stdin {
+        access::PasswordSource::Stdin
+    } else {
+        access::PasswordSource::Prompt
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -170,6 +264,68 @@ fn main() -> ExitCode {
             }),
             ServiceCommand::Run => service::run(&cli.config),
         },
+        Command::Users { command } => {
+            settings::Settings::load(&cli.config).and_then(|settings| match command {
+                UsersCommand::CreateAdmin {
+                    username,
+                    display_name,
+                    password_stdin,
+                } => access::add_user(
+                    &settings,
+                    &username,
+                    display_name.as_deref(),
+                    "admin",
+                    password_source(password_stdin),
+                    &mut out,
+                ),
+                UsersCommand::Add {
+                    username,
+                    role,
+                    display_name,
+                    password_stdin,
+                } => access::add_user(
+                    &settings,
+                    &username,
+                    display_name.as_deref(),
+                    &role,
+                    password_source(password_stdin),
+                    &mut out,
+                ),
+                UsersCommand::List => access::list_users(&settings, &mut out),
+                UsersCommand::Disable { username } => {
+                    access::set_disabled(&settings, &username, true, &mut out)
+                }
+                UsersCommand::Enable { username } => {
+                    access::set_disabled(&settings, &username, false, &mut out)
+                }
+                UsersCommand::Passwd {
+                    username,
+                    password_stdin,
+                } => access::set_password(
+                    &settings,
+                    &username,
+                    password_source(password_stdin),
+                    &mut out,
+                ),
+            })
+        }
+        Command::Tokens { command } => {
+            settings::Settings::load(&cli.config).and_then(|settings| match command {
+                TokensCommand::Create {
+                    name,
+                    role,
+                    expires_in,
+                } => access::create_token(
+                    &settings,
+                    &name,
+                    &role,
+                    expires_in.map(|duration| duration.0),
+                    &mut out,
+                ),
+                TokensCommand::List => access::list_tokens(&settings, &mut out),
+                TokensCommand::Revoke { id } => access::revoke_token(&settings, id, &mut out),
+            })
+        }
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

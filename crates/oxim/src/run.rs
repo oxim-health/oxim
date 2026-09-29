@@ -40,6 +40,14 @@ pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) 
         channels = %settings.channels_dir.display(),
         "OXIM started"
     );
+    let web = crate::web::start(&settings, &engine).await;
+    let web = match web {
+        Ok(web) => web,
+        Err(e) => {
+            engine.shutdown().await;
+            return Err(e);
+        }
+    };
 
     let mut watcher = ChannelWatcher::new(settings.channels_dir.clone());
     watcher.sync(&engine).await;
@@ -57,6 +65,7 @@ pub(crate) async fn run(settings: Settings, shutdown: impl Future<Output = ()>) 
 
     shutdown.await;
     info!("stopping");
+    crate::web::stop(web).await;
     if let Some(reload) = reload {
         reload.abort();
     }
