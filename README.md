@@ -34,6 +34,10 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-fhir`](crates/oxim-fhir) | HL7 FHIR R4 JSON resources, mapping to and from the normalized model, transaction response summaries |
 | [`crates/oxim-lab`](crates/oxim-lab) | Laboratory workflows: order cache, host query answers, test routing and worklist download |
 | [`crates/oxim-connectors`](crates/oxim-connectors) | Source and destination connectors: MLLP, raw TCP, files, HTTP, ASTM over TCP and serial, POCT1-A |
+| [`crates/oxim-devices`](crates/oxim-devices) | Device profiles, the device registry (`track-device`, silence detection) and `oxim profile test` conformance runs |
+| [`crates/oxim-capture`](crates/oxim-capture) | The `.oximcap` capture format, a recording TCP proxy and serial bridge, and capture replay |
+| [`crates/oxim-anonymize`](crates/oxim-anonymize) | Removes protected health information from HL7 v2, ASTM, POCT1-A, JSON and XML messages and captures |
+| [`profiles`](profiles) | Example device profiles with synthetic fixtures |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |
 | [`fuzz`](fuzz) | Fuzz targets (cargo-fuzz) |

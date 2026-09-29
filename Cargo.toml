@@ -30,6 +30,7 @@ hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
 memchr = "2.7"
 quick-xml = "0.42"
 regex = "1.11"
+ring = "0.17"
 rusqlite = { version = "0.40", features = ["bundled"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-native-certs = "0.8"
@@ -43,9 +44,12 @@ tokio-serial = { version = "5.5", default-features = false }
 tokio-util = "0.7"
 tracing = "0.1"
 
+oxim-anonymize = { path = "crates/oxim-anonymize" }
 oxim-astm = { path = "crates/oxim-astm" }
+oxim-capture = { path = "crates/oxim-capture" }
 oxim-connectors = { path = "crates/oxim-connectors" }
 oxim-core = { path = "crates/oxim-core" }
+oxim-devices = { path = "crates/oxim-devices" }
 oxim-fhir = { path = "crates/oxim-fhir" }
 oxim-formats = { path = "crates/oxim-formats" }
 oxim-hl7 = { path = "crates/oxim-hl7" }
@@ -54,6 +58,7 @@ oxim-mapping = { path = "crates/oxim-mapping" }
 oxim-mllp = { path = "crates/oxim-mllp" }
 oxim-model = { path = "crates/oxim-model" }
 oxim-poct1a = { path = "crates/oxim-poct1a" }
+oxim-sim = { path = "crates/oxim-sim" }
 oxim-store = { path = "crates/oxim-store" }
 oxim-transform = { path = "crates/oxim-transform" }
 

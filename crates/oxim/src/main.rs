@@ -4,6 +4,7 @@ mod commands;
 mod components;
 mod init;
 mod logging;
+mod profile;
 mod run;
 mod service;
 mod settings;
@@ -47,6 +48,11 @@ enum Command {
     Messages {
         #[command(subcommand)]
         command: MessagesCommand,
+    },
+    /// Check device profiles and run their fixtures.
+    Profile {
+        #[command(subcommand)]
+        command: profile::ProfileCommand,
     },
     /// Install and control the operating system service.
     Service {
@@ -158,6 +164,7 @@ fn main() -> ExitCode {
                 }
             })
         }
+        Command::Profile { command } => profile::run(command, &mut out),
         Command::Service { command } => match command {
             ServiceCommand::Install => service::install(&cli.config, &mut out),
             ServiceCommand::Uninstall => service::uninstall(&mut out),
