@@ -213,6 +213,12 @@ dependencies = [
 
 [[package]]
 name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
+name = "base64"
 version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
@@ -504,6 +510,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "dicom-json"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e17a0468bd66f606d21d05773b86166302e192ab74dd2347b6895985f4b5d84e"
+dependencies = [
+ "base64 0.22.1",
+ "dicom-core",
+ "dicom-dictionary-std",
+ "dicom-object",
+ "num-traits",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "dicom-object"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -559,8 +581,10 @@ dependencies = [
  "cfg-if",
  "dicom-encoding",
  "dicom-transfer-syntax-registry",
+ "rustls",
  "snafu",
  "tokio",
+ "tokio-rustls",
  "tracing",
 ]
 
@@ -1392,6 +1416,7 @@ dependencies = [
  "bytes",
  "dicom-core",
  "dicom-dictionary-std",
+ "dicom-json",
  "dicom-object",
  "dicom-transfer-syntax-registry",
  "dicom-ul",
@@ -1401,16 +1426,23 @@ dependencies = [
  "hyper-rustls",
  "hyper-util",
  "memchr",
+ "oxim-connectors",
  "oxim-core",
+ "oxim-hl7",
+ "oxim-mapping",
+ "oxim-mllp",
  "oxim-model",
  "oxim-store",
  "proptest",
+ "rcgen",
  "ring",
+ "rusqlite",
  "rustls",
  "rustls-native-certs",
  "rustls-pki-types",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tokio",
  "tracing",
@@ -1525,7 +1557,7 @@ name = "oxim-server"
 version = "0.0.0"
 dependencies = [
  "axum",
- "base64",
+ "base64 0.23.1",
  "futures-util",
  "http-body-util",
  "oxim-astm",
@@ -1607,7 +1639,7 @@ version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d354a98a3d1251555de99e8fdd8afda05573c31b82f59063a7b0a29b5527f120"
 dependencies = [
- "base64",
+ "base64 0.23.1",
  "serde_core",
 ]
 
@@ -2009,7 +2041,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8050abb251097357e24aff63ba2c52a6309ecb7d23a5474023df960a02694d8"
 dependencies = [
  "annotate-snippets",
- "base64",
+ "base64 0.23.1",
  "encoding_rs_io",
  "granit-parser",
  "nohash-hasher",

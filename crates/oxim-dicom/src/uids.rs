@@ -18,6 +18,52 @@ pub const IMPLEMENTATION_CLASS_UID: &str = "2.25.3285976131844741203462243832193
 /// The Implementation Version Name written by OXIM.
 pub const IMPLEMENTATION_VERSION_NAME: &str = concat!("OXIM_", env!("CARGO_PKG_VERSION"));
 
+/// Patient Root Query/Retrieve Information Model - FIND.
+pub const PATIENT_ROOT_FIND: &str = "1.2.840.10008.5.1.4.1.2.1.1";
+/// Patient Root Query/Retrieve Information Model - MOVE.
+pub const PATIENT_ROOT_MOVE: &str = "1.2.840.10008.5.1.4.1.2.1.2";
+/// Patient Root Query/Retrieve Information Model - GET.
+pub const PATIENT_ROOT_GET: &str = "1.2.840.10008.5.1.4.1.2.1.3";
+/// Study Root Query/Retrieve Information Model - FIND.
+pub const STUDY_ROOT_FIND: &str = "1.2.840.10008.5.1.4.1.2.2.1";
+/// Study Root Query/Retrieve Information Model - MOVE.
+pub const STUDY_ROOT_MOVE: &str = "1.2.840.10008.5.1.4.1.2.2.2";
+/// Study Root Query/Retrieve Information Model - GET.
+pub const STUDY_ROOT_GET: &str = "1.2.840.10008.5.1.4.1.2.2.3";
+/// Modality Worklist Information Model - FIND.
+pub const MODALITY_WORKLIST_FIND: &str = "1.2.840.10008.5.1.4.31";
+/// Modality Performed Procedure Step SOP Class.
+pub const MPPS: &str = "1.2.840.10008.3.1.2.3.3";
+/// Storage Commitment Push Model SOP Class.
+pub const STORAGE_COMMITMENT_PUSH: &str = "1.2.840.10008.1.20.1";
+/// The well-known SOP instance of the Storage Commitment Push Model.
+pub const STORAGE_COMMITMENT_INSTANCE: &str = "1.2.840.10008.1.20.1.1";
+
+/// A new UID under the `2.25` arc: a random 128-bit number (PS3.5 B.2).
+pub fn generate() -> String {
+    use ring::rand::SecureRandom;
+    let mut bytes = [0u8; 16];
+    if ring::rand::SystemRandom::new().fill(&mut bytes).is_err() {
+        // The system generator does not fail on supported platforms; fall
+        // back to the clock so a UID is still produced.
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_nanos())
+            .unwrap_or_default();
+        bytes = nanos.to_be_bytes();
+    }
+    format!("2.25.{}", u128::from_be_bytes(bytes))
+}
+
+/// A UID under the `2.25` arc derived from `seed` with SHA-256, so the same
+/// seed always gives the same UID.
+pub fn derived(seed: &str) -> String {
+    let digest = ring::digest::digest(&ring::digest::SHA256, seed.as_bytes());
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&digest.as_ref()[..16]);
+    format!("2.25.{}", u128::from_be_bytes(bytes))
+}
+
 /// Whether `uid` is a syntactically valid UID: at most 64 characters,
 /// numeric components separated by dots, without leading zeros.
 pub fn is_valid_uid(uid: &str) -> bool {

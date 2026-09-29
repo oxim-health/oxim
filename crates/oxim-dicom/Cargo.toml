@@ -1,6 +1,6 @@
 [package]
 name = "oxim-dicom"
-description = "DICOM routing for OXIM: Storage SCP/SCU, DICOMweb STOW-RS, tag filters and de-identification"
+description = "DICOM for OXIM: storage, query/retrieve, modality worklist, MPPS, storage commitment, DICOMweb and de-identification"
 keywords = ["dicom", "healthcare", "imaging", "interoperability", "pacs"]
 categories = ["network-programming"]
 readme = "README.md"
@@ -17,19 +17,23 @@ publish.workspace = true
 bytes.workspace = true
 dicom-core.workspace = true
 dicom-dictionary-std.workspace = true
+dicom-json.workspace = true
 dicom-object.workspace = true
 dicom-transfer-syntax-registry.workspace = true
-dicom-ul.workspace = true
+dicom-ul = { workspace = true, features = ["async-tls"] }
 http.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
 hyper-rustls.workspace = true
 hyper-util.workspace = true
 memchr.workspace = true
+oxim-connectors.workspace = true
 oxim-core.workspace = true
+oxim-hl7.workspace = true
 oxim-model.workspace = true
 oxim-store.workspace = true
 ring.workspace = true
+rusqlite.workspace = true
 rustls.workspace = true
 rustls-native-certs.workspace = true
 rustls-pki-types.workspace = true
@@ -40,7 +44,11 @@ tokio = { workspace = true, features = ["io-util", "net"] }
 tracing.workspace = true
 
 [dev-dependencies]
+oxim-mapping.workspace = true
+oxim-mllp.workspace = true
 proptest.workspace = true
+rcgen.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

@@ -10,23 +10,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderName, HeaderValue};
+use http::header::{ACCEPT, CONTENT_TYPE, HeaderName, HeaderValue};
 use http::{Method, Request, StatusCode, Uri};
 use http_body_util::{BodyExt, Full, Limited};
-use hyper_rustls::HttpsConnector;
-use hyper_util::client::legacy::Client;
-use hyper_util::client::legacy::connect::HttpConnector;
-use hyper_util::rt::TokioExecutor;
 use oxim_core::config::DurationText;
 use oxim_core::{DestinationConfig, DestinationConnector, EngineError, SendError, async_trait};
 use oxim_store::Delivery;
-use rustls_pki_types::CertificateDer;
-use rustls_pki_types::pem::PemObject;
 use serde::Deserialize;
-use tracing::debug;
 
 use crate::net::settings;
 use crate::scu::failure_is_temporary;
+use crate::web::{self, HttpClient};
 
 fn default_timeout() -> DurationText {
     DurationText(Duration::from_secs(120))
@@ -70,7 +64,7 @@ pub struct StowDestination {
     headers: Vec<(HeaderName, HeaderValue)>,
     timeout: Duration,
     max_response_size: usize,
-    client: Client<HttpsConnector<HttpConnector>, Full<Bytes>>,
+    client: HttpClient,
 }
 
 impl std::fmt::Debug for StowDestination {
@@ -79,33 +73,6 @@ impl std::fmt::Debug for StowDestination {
             .field("uri", &self.uri)
             .finish_non_exhaustive()
     }
-}
-
-fn tls_config(ca_file: Option<&PathBuf>) -> Result<rustls::ClientConfig, EngineError> {
-    let mut roots = rustls::RootCertStore::empty();
-    let native = rustls_native_certs::load_native_certs();
-    for error in &native.errors {
-        debug!(%error, "cannot load a system certificate");
-    }
-    let (_added, _ignored) = roots.add_parsable_certificates(native.certs);
-    if let Some(path) = ca_file {
-        let certificates = CertificateDer::pem_file_iter(path)
-            .map_err(|e| EngineError::Config(format!("cannot read {}: {e}", path.display())))?;
-        for certificate in certificates {
-            let certificate = certificate.map_err(|e| {
-                EngineError::Config(format!("invalid certificate in {}: {e}", path.display()))
-            })?;
-            roots.add(certificate).map_err(|e| {
-                EngineError::Config(format!("invalid certificate in {}: {e}", path.display()))
-            })?;
-        }
-    }
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    Ok(rustls::ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
-        .map_err(|e| EngineError::Config(format!("TLS configuration: {e}")))?
-        .with_root_certificates(roots)
-        .with_no_client_auth())
 }
 
 /// The failure described by a STOW-RS response body: the Failure Reason
@@ -201,55 +168,18 @@ pub(crate) fn multipart(payload: &[u8], seed: &str) -> (String, Vec<u8>) {
 impl StowDestination {
     /// Validates the settings and creates the destination.
     pub fn new(settings: StowSettings) -> Result<Self, EngineError> {
-        let config =
-            |message: String| EngineError::Config(format!("dicomweb-stow destination: {message}"));
-        let url = format!("{}/studies", settings.url.trim().trim_end_matches('/'));
-        let uri: Uri = url
-            .parse()
-            .map_err(|e| config(format!("invalid url {:?}: {e}", settings.url)))?;
-        if !matches!(uri.scheme_str(), Some("http" | "https")) || uri.host().is_none() {
-            return Err(config(format!(
-                "url {:?} must be an absolute http:// or https:// URL",
-                settings.url
-            )));
-        }
-        let mut headers = settings
-            .headers
-            .iter()
-            .map(|(name, value)| {
-                Ok((
-                    HeaderName::from_bytes(name.as_bytes())
-                        .map_err(|e| config(format!("invalid header name {name:?}: {e}")))?,
-                    HeaderValue::from_str(value)
-                        .map_err(|e| config(format!("invalid value for header {name}: {e}")))?,
-                ))
-            })
-            .collect::<Result<Vec<_>, EngineError>>()?;
-        let token = match (&settings.bearer_token, &settings.bearer_token_env) {
-            (Some(_), Some(_)) => {
-                return Err(config(
-                    "set bearer_token or bearer_token_env, not both".into(),
-                ));
-            }
-            (Some(token), None) => Some(token.clone()),
-            (None, Some(variable)) => Some(
-                std::env::var(variable)
-                    .map_err(|_| config(format!("environment variable {variable} is not set")))?,
-            ),
-            (None, None) => None,
-        };
-        if let Some(token) = token {
-            let mut value = HeaderValue::from_str(&format!("Bearer {}", token.trim()))
-                .map_err(|_| config("the bearer token is not a valid header value".into()))?;
-            value.set_sensitive(true);
-            headers.push((AUTHORIZATION, value));
-        }
-        let connector = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_tls_config(tls_config(settings.ca_file.as_ref())?)
-            .https_or_http()
-            .enable_http1()
-            .build();
-        let client = Client::builder(TokioExecutor::new()).build(connector);
+        const WHAT: &str = "dicomweb-stow destination";
+        let base = web::base_url(WHAT, &settings.url)?;
+        let uri: Uri = format!("{base}/studies").parse().map_err(|e| {
+            EngineError::Config(format!("{WHAT}: invalid url {:?}: {e}", settings.url))
+        })?;
+        let headers = web::headers(
+            WHAT,
+            &settings.headers,
+            settings.bearer_token.as_ref(),
+            settings.bearer_token_env.as_ref(),
+        )?;
+        let client = web::client(settings.ca_file.as_ref())?;
         Ok(Self {
             uri,
             headers,
@@ -389,7 +319,7 @@ mod tests {
         assert!(
             stow.headers
                 .iter()
-                .any(|(name, value)| name == AUTHORIZATION && value.is_sensitive())
+                .any(|(name, value)| name == http::header::AUTHORIZATION && value.is_sensitive())
         );
     }
 }
