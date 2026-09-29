@@ -27,6 +27,7 @@ OXIM moves and reformats clinical data; it never interprets it (see [ADR 0011](d
 | [`crates/oxim-poct1a`](crates/oxim-poct1a) | POCT1-A stream splitting, lossless messages, builders and the host conversation |
 | [`crates/oxim-store`](crates/oxim-store) | Durable message store and per-destination delivery queues (SQLite) |
 | [`crates/oxim-core`](crates/oxim-core) | Channel runtime: sources, pipeline, durable queues, destination workers and configuration |
+| [`crates/oxim-transform`](crates/oxim-transform) | Declarative filters, mapping operations and code tables |
 | [`docs/SPEC.md`](docs/SPEC.md) | Product and engineering specification |
 | [`docs/adr`](docs/adr) | Architecture decision records |
 | [`fuzz`](fuzz) | Fuzz targets (cargo-fuzz) |
