@@ -54,6 +54,13 @@ server:
 #     - {id: lis-backlog, kind: queue_depth, destination: lis, above: 100, for: 5m}
 #     - {id: analyzers, kind: device_silence, severity: critical}
 #     - {id: disk, kind: disk_space, below: 10%}
+
+# Backups: `oxim backup`, the web UI and an optional daily schedule.
+backups:
+  keep: 7                  # backups kept in the backup directory
+  # dir: backups           # default: data/backups
+  # schedule: \"02:00\"      # daily, at this time of day
+  # utc_offset: 180        # minutes; the schedule's time zone (UTC+3)
 ";
 
 const EXAMPLE_CHANNEL: &str = "\

@@ -13,13 +13,19 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use http_body_util::BodyExt;
+use oxim_alert::{AlertEngine, AlertSettings, Sources};
 use oxim_auth::{AuthStore, NewUser, Role};
 use oxim_core::{
     DestinationConnector, Engine, EngineOptions, Registry, SendError, SourceConnector,
     SourceContext, SystemClock, async_trait,
 };
-use oxim_model::{ChannelId, ConnectorId, DataType, Envelope, MessageIdGenerator, MessageStatus};
-use oxim_server::{AppState, ServerConfig, router};
+use oxim_devices::registry::Sighting;
+use oxim_devices::{DeviceEnvironment, DeviceIdentity, DeviceRegistry};
+use oxim_model::{
+    ChannelId, ConnectorId, DataType, DeviceId, Envelope, MessageIdGenerator, MessageStatus,
+};
+use oxim_server::history::ChannelHistory;
+use oxim_server::{AppState, ServerConfig, Services, router};
 use oxim_store::{Delivery, SqliteStore};
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -279,8 +285,56 @@ async fn responses_match_the_documented_schemas() {
         dir.path().join("tables"),
         dir.path().join("data"),
     );
+    // Operations services: an alert that always fires, a device registry
+    // with one seen and one declared device, and channel history.
+    let alert_settings: AlertSettings = serde_json::from_value(json!({
+        "targets": [{"id": "log", "type": "log"}],
+        "rules": [{"id": "disk", "kind": "disk_space", "below": "100%", "severity": "warning"}]
+    }))
+    .unwrap();
+    let alerts = Arc::new(AlertEngine::new(alert_settings, engine.registry()).unwrap());
+    let snapshot = alerts
+        .collect(&Sources {
+            engine: engine.clone(),
+            devices: None,
+            data_dir: dir.path().join("data"),
+            certificates: Vec::new(),
+        })
+        .await;
+    alerts.process(&snapshot);
+    let registry = Arc::new(DeviceRegistry::open_in_memory().unwrap());
+    let device = DeviceId::new("chem-1").unwrap();
+    let lab = ChannelId::new("lab").unwrap();
+    registry
+        .record(&Sighting {
+            device: &device,
+            channel: &lab,
+            message: MessageIdGenerator::new().next(1_790_000_000_000, 7),
+            at: now,
+            silence_after: Some(Duration::from_secs(1800)),
+            identity: &DeviceIdentity {
+                model: Some("Chemistry analyzer".into()),
+                serial_number: Some("SN-0001".into()),
+                ..DeviceIdentity::default()
+            },
+        })
+        .unwrap();
+    let devices = DeviceEnvironment::with_registry(registry);
+    devices.declare(
+        DeviceId::new("chem-2").unwrap(),
+        Some(Duration::from_secs(600)),
+    );
+    let services = Services::new()
+        .with_alerts(alerts)
+        .with_devices(devices)
+        .with_history(Arc::new(ChannelHistory::open_in_memory().unwrap()));
     let harness = Harness {
-        app: router(AppState::new(engine.clone(), auth, config)),
+        app: router(AppState::with_services(
+            engine.clone(),
+            auth,
+            config,
+            services,
+        )),
         document: oxim_server::openapi(),
     };
     let json_body = |value: Value| Some(("application/json", value.to_string()));
@@ -528,6 +582,146 @@ async fn responses_match_the_documented_schemas() {
     harness
         .expect(Method::GET, "/api/v1/system", "/api/v1/system", admin, None)
         .await;
+
+    // Operations.
+    let overview = harness
+        .expect(Method::GET, "/api/v1/alerts", "/api/v1/alerts", admin, None)
+        .await;
+    assert_eq!(overview["active"][0]["rule"], "disk");
+    assert_eq!(overview["targets"][0]["type"], "log");
+    let devices = harness
+        .expect(
+            Method::GET,
+            "/api/v1/devices",
+            "/api/v1/devices",
+            admin,
+            None,
+        )
+        .await;
+    assert_eq!(devices["devices"].as_array().unwrap().len(), 2, "{devices}");
+    harness
+        .expect(
+            Method::DELETE,
+            "/api/v1/devices/lab/chem-1",
+            "/api/v1/devices/{channel}/{device}",
+            admin,
+            None,
+        )
+        .await;
+    let changed = channel.replace("name: Laboratory", "name: Core laboratory");
+    harness
+        .expect(
+            Method::PUT,
+            "/api/v1/channels/lab",
+            "/api/v1/channels/{id}",
+            admin,
+            Some(("application/yaml", changed)),
+        )
+        .await;
+    let history = harness
+        .expect(
+            Method::GET,
+            "/api/v1/channels/lab/history",
+            "/api/v1/channels/{id}/history",
+            admin,
+            None,
+        )
+        .await;
+    assert_eq!(
+        history["versions"].as_array().unwrap().len(),
+        2,
+        "{history}"
+    );
+    let first = harness
+        .expect(
+            Method::GET,
+            "/api/v1/channels/lab/history/1",
+            "/api/v1/channels/{id}/history/{version}",
+            admin,
+            None,
+        )
+        .await;
+    assert_eq!(first["yaml"], channel);
+    let restored = harness
+        .expect(
+            Method::POST,
+            "/api/v1/channels/lab/history/1/restore",
+            "/api/v1/channels/{id}/history/{version}/restore",
+            admin,
+            None,
+        )
+        .await;
+    assert_eq!(restored["version"], 3);
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("channels/lab.yaml")).unwrap(),
+        channel
+    );
+    let maintenance = harness
+        .expect(
+            Method::POST,
+            "/api/v1/system/maintenance",
+            "/api/v1/system/maintenance",
+            admin,
+            json_body(json!({ "enabled": true, "reason": "LIS upgrade" })),
+        )
+        .await;
+    assert_eq!(maintenance["enabled"], true);
+    let system = harness
+        .expect(Method::GET, "/api/v1/system", "/api/v1/system", admin, None)
+        .await;
+    assert_eq!(system["maintenance"]["reason"], "LIS upgrade");
+    harness
+        .expect(
+            Method::POST,
+            "/api/v1/system/maintenance",
+            "/api/v1/system/maintenance",
+            admin,
+            json_body(json!({ "enabled": false })),
+        )
+        .await;
+    let created = harness
+        .expect(
+            Method::POST,
+            "/api/v1/backups",
+            "/api/v1/backups",
+            admin,
+            None,
+        )
+        .await;
+    let name = created["name"].as_str().unwrap().to_owned();
+    let backups = harness
+        .expect(
+            Method::GET,
+            "/api/v1/backups",
+            "/api/v1/backups",
+            admin,
+            None,
+        )
+        .await;
+    assert_eq!(backups["backups"][0]["name"], name.as_str());
+    let (status, _) = harness
+        .call(Method::GET, &format!("/api/v1/backups/{name}"), admin, None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    // Viewers see devices but not backups (their earlier sessions ended).
+    let viewer_session = harness
+        .expect(
+            Method::POST,
+            "/api/v1/auth/login",
+            "/api/v1/auth/login",
+            None,
+            login("viewer"),
+        )
+        .await;
+    let viewer = viewer_session["token"].as_str().unwrap().to_owned();
+    let (status, _) = harness
+        .call(Method::GET, "/api/v1/devices", Some(&viewer), None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = harness
+        .call(Method::GET, "/api/v1/backups", Some(&viewer), None)
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
 
     // The first server-sent event has the documented shape.
     let request = Request::builder()

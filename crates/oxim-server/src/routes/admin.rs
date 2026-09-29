@@ -415,5 +415,6 @@ pub(crate) async fn system(
         "session_idle_seconds": inner.config.sessions.idle.as_secs(),
         "session_max_seconds": inner.config.sessions.max.as_secs(),
         "component_types": types,
+        "maintenance": super::ops::maintenance_json(&state),
     })))
 }

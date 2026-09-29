@@ -35,11 +35,13 @@ pub enum Permission {
     ViewAudit,
     /// Read system information and metrics.
     ViewSystem,
+    /// Create and download backups and switch maintenance mode.
+    ManageSystem,
 }
 
 impl Permission {
     /// Every permission.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::ViewDashboard,
         Self::ViewMessages,
         Self::ViewUnmasked,
@@ -54,6 +56,7 @@ impl Permission {
         Self::ManageTokens,
         Self::ViewAudit,
         Self::ViewSystem,
+        Self::ManageSystem,
     ];
 }
 
@@ -94,7 +97,7 @@ impl Role {
             Self::Admin => true,
             Self::Operator => !matches!(
                 permission,
-                EraseMessages | ManageUsers | ManageTokens | ViewAudit
+                EraseMessages | ManageUsers | ManageTokens | ViewAudit | ManageSystem
             ),
             Self::Viewer => matches!(
                 permission,
@@ -150,6 +153,8 @@ mod tests {
         assert!(Role::Operator.allows(Permission::DeployChannels));
         assert!(!Role::Operator.allows(Permission::ManageUsers));
         assert!(!Role::Operator.allows(Permission::ViewAudit));
+        assert!(!Role::Operator.allows(Permission::ManageSystem));
+        assert!(Role::Admin.allows(Permission::ManageSystem));
         assert!(Role::Viewer.allows(Permission::ViewMessages));
         assert!(!Role::Viewer.allows(Permission::ViewUnmasked));
         assert!(!Role::Viewer.allows(Permission::RepairMessages));
